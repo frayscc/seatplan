@@ -1,0 +1,1828 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>快速排座位</title>
+    <style>
+        body {
+            font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background-color: #fff;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+            font-size: 18px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #555;
+            font-weight: bold;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: stretch;
+        }
+        
+        .panel {
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .import-controls {
+            width: 300px;
+        }
+
+        .male-list, .female-list {
+            width: 200px;
+        }
+        
+        .seat-area {
+            flex: 1;
+            align-items: center;
+            min-width: 600px;
+        }
+
+        .student-list-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            min-height: 120px;
+            padding: 8px;
+            border: 2px dashed transparent;
+            border-radius: 8px;
+            box-sizing: border-box;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .student-list-container:empty::before {
+            content: "拖动学生到这里";
+            display: block;
+            padding: 28px 8px;
+            color: #999;
+            text-align: center;
+            font-size: 14px;
+            pointer-events: none;
+        }
+        .student-list-container.drag-over {
+            background-color: #f3f7f8;
+            border-color: #6f8f99;
+        }
+
+        .student {
+            border-radius: 6px;
+            padding: 8px;
+            margin: 6px 0;
+            text-align: center;
+            cursor: grab;
+            user-select: none;
+            font-weight: bold;
+            font-size: 18px;
+            transition: background-color 0.2s, border 0.2s;
+            position: relative;
+            overflow: hidden;
+            z-index: 0;
+            border: 1px solid transparent; 
+        }
+        .student-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            width: 100%;
+            min-width: 0;
+            padding: 0 3px;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        .student-name {
+            display: block;
+            flex: 0 1 auto;
+            min-width: 0;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .student-identity {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35em;
+            min-width: 0;
+        }
+        .student-number {
+            flex: 0 0 auto;
+            white-space: nowrap;
+        }
+        .student-annotation {
+            position: static;
+            flex: 0 0 auto;
+            width: 1.4em;
+            height: 1.5em;
+            line-height: 1.5em;
+            border-radius: 5px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-align: center;
+            font-size: 0.65em;
+            font-weight: 800;
+            color: #fff;
+            background: #5f6f86;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            z-index: 2;
+        }
+        .student-annotations {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            min-width: 0;
+            overflow: hidden;
+        }
+        .male {
+            background-color: #add8e6;
+            color: #333;
+        }
+        .female {
+            background-color: #f6c1c1;
+            color: #333;
+        }
+        .student:active {
+            cursor: grabbing;
+        }
+
+        .leader {
+            color: #333;
+            border: 3px solid; 
+        }
+        .leader.male {
+            background: linear-gradient(to right, #4682b4, #add8e6 60%); 
+            border-color: #1a4f78;
+        }
+        .leader.female {
+            background: linear-gradient(to right, #b47979, #f6c1c1 60%); 
+            border-color: #8c4c4c;
+        }
+        
+        .seat-config {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap; 
+            justify-content: center;
+        }
+        .seat-config input[type="number"] {
+            width: 50px;
+            text-align: center;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .seat-config select {
+            padding: 5px 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 15px;
+            background: #fff;
+        }
+        .seat-config button {
+            padding: 5px 10px;
+        }
+
+        .auto-seat-controls {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 15px;
+        }
+        .auto-seat-controls button {
+            background-color: #5cb85c;
+            color: white;
+            font-size: 18px;
+            padding: 10px 20px;
+        }
+        .auto-seat-controls button:hover {
+            background-color: #4cae4c;
+        }
+
+        /* 为顶部控制按钮留出空间 */
+        #seatTable {
+            margin-top: 15px; 
+            border-collapse: separate;
+            border-spacing: 6px;
+        }
+        td {
+            width: 140px;
+            min-width: 140px;
+            max-width: 140px;
+            height: 60px;
+            box-sizing: border-box;
+            border: 1px dashed #bbb; 
+            border-radius: 6px;
+            text-align: center;
+            vertical-align: middle;
+            font-size: 20px;
+            font-weight: bold;
+            background-color: #f0efeb;
+            transition: background-color 0.3s, border 0.2s;
+            cursor: pointer;
+            position: relative;
+            /* overflow: hidden; 被移除以允许按钮显示在边缘外 */
+            z-index: 0;
+        }
+        body.compact-seat-layout #seatTable td:not(.aisle) {
+            width: 100px;
+            min-width: 100px;
+            max-width: 100px;
+        }
+        body.compact-seat-layout #seatTable .student-content {
+            gap: 1px;
+            padding: 0 1px;
+        }
+        body.compact-seat-layout #seatTable .student-annotation {
+            width: 1.3em;
+            height: 1.45em;
+            line-height: 1.45em;
+            border-radius: 4px;
+        }
+        body.compact-seat-layout #seatTable .student-number {
+            position: absolute;
+            left: 5px;
+            top: 4px;
+            font-size: 12px;
+            line-height: 1;
+            color: rgba(51, 51, 51, 0.72);
+        }
+        body.compact-seat-layout #seatTable .student-identity {
+            gap: 0;
+        }
+        body.stacked-seat-layout #seatTable td:not(.aisle) {
+            width: 100px;
+            min-width: 100px;
+            max-width: 100px;
+            height: 66px;
+        }
+        body.stacked-seat-layout #seatTable .student-content {
+            position: absolute;
+            inset: 0;
+            display: grid;
+            grid-template-rows: 18px 30px 18px;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 0;
+            padding: 0 3px;
+            overflow: hidden;
+        }
+        body.stacked-seat-layout #seatTable .student-identity {
+            display: contents;
+        }
+        body.stacked-seat-layout #seatTable .student-number {
+            position: static;
+            grid-row: 1;
+            justify-self: center;
+            align-self: center;
+            font-size: 12px;
+            line-height: 1;
+            color: rgba(51, 51, 51, 0.72);
+        }
+        body.stacked-seat-layout #seatTable .student-name {
+            grid-row: 2;
+            justify-self: center;
+            align-self: center;
+            line-height: 30px;
+        }
+        body.stacked-seat-layout #seatTable .student-annotations {
+            grid-row: 3;
+            justify-self: stretch;
+            align-self: center;
+        }
+        body.stacked-seat-layout #seatTable .student-annotation {
+            width: auto;
+            min-width: 1.3em;
+            height: 1.15em;
+            line-height: 1.15em;
+            padding: 0 0.25em;
+            box-sizing: border-box;
+            border-radius: 4px;
+        }
+        
+        /* 过道单元格样式 */
+        td.aisle {
+            width: 30px; 
+            min-width: 30px;
+            max-width: 30px;
+            border: none;
+            background-color: transparent;
+            cursor: default;
+        }
+        
+        /* --- 新增：动态过道控制按钮样式 --- */
+        .aisle-control-btn {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            color: white;
+            border: none;
+            font-size: 18px;
+            font-weight: bold;
+            line-height: 20px;
+            cursor: pointer;
+            z-index: 10;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            transition: transform 0.2s, background-color 0.2s;
+        }
+        .aisle-control-btn:hover {
+            transform: scale(1.15);
+        }
+        .aisle-control-btn.add {
+            background-color: #5cb85c;
+            /* 漂浮在右侧列间隙（6px 的间隙中心） */
+            top: -12px;
+            right: -15px; 
+        }
+        .aisle-control-btn.add:hover {
+            background-color: #4cae4c;
+        }
+        .aisle-control-btn.remove {
+            background-color: #d9534f;
+            /* 过道列本身的中心 */
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        .aisle-control-btn.remove:hover {
+            background-color: #c9302c;
+            transform: translateX(-50%) scale(1.15);
+        }
+        
+        td.drag-over {
+            background-color: #d6ccc2;
+            outline: 3px solid rgba(111, 143, 153, 0.45);
+        }
+        #leaderBox.drag-over, #talkativeBox.drag-over, #annotationBox.drag-over {
+            background-color: #f3f7f8;
+            border-color: #6f8f99;
+        }
+        td.leader {
+            color: #333;
+            border: 3px solid; 
+        }
+        td[data-gender="male"].leader {
+            background: linear-gradient(to right, #4682b4, #add8e6 60%); 
+            border-color: #1a4f78;
+        }
+        td[data-gender="female"].leader {
+            background: linear-gradient(to right, #b47979, #f6c1c1 60%); 
+            border-color: #8c4c4c;
+        }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        button {
+            background-color: #b8c0c2;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.2s;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #a5b0b2;
+        }
+        textarea {
+            margin-top: 10px;
+            width: 100%;
+            max-width: 100%;
+            height: 120px;
+            border-radius: 8px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            resize: vertical;
+            font-size: 16px;
+        }
+        .podium {
+            margin: 10px auto;
+            width: 100px;
+            height: 60px;
+            border: 1px dashed #bbb;
+            border-radius: 6px;
+            text-align: center;
+            line-height: 60px;
+            font-size: 20px;
+            font-weight: bold;
+            background-color: #ddd;
+        }
+        #leaderBox, #talkativeBox, #annotationBox {
+            margin-top: 20px;
+            border: 2px dashed #a5a5a5;
+            padding: 15px;
+            text-align: center;
+            border-radius: 8px;
+            min-height: 80px;
+        }
+        #leaderBox h4, #talkativeBox h4, #annotationBox h4 {
+            margin: 0 0 10px 0;
+            color: #777;
+        }
+        .annotation-settings {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #667;
+        }
+        #annotationInput {
+            width: 58px;
+            padding: 5px 7px;
+            border: 1px solid #bbb;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 16px;
+        }
+        .annotation-tip {
+            min-height: 18px;
+            color: #8a6d3b;
+            font-size: 13px;
+        }
+
+        .student.talkative::before, td.talkative::before {
+            content: '📣'; 
+            position: absolute;
+            top: -2px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 16px;
+            z-index: 1;
+        }
+        .count-badge {
+            display: inline-block;
+            min-width: 24px;
+            margin-left: 6px;
+            padding: 2px 7px;
+            border-radius: 999px;
+            background: #edf1f2;
+            color: #52646a;
+            font-size: 14px;
+            vertical-align: middle;
+        }
+        .seat-summary {
+            margin: -4px 0 8px;
+            color: #667;
+            font-size: 14px;
+        }
+        @media (max-width: 900px) {
+            body {
+                padding: 10px;
+            }
+            .container {
+                justify-content: stretch;
+            }
+            .panel, .import-controls, .male-list, .female-list, .seat-area {
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+            }
+            .seat-area {
+                overflow-x: auto;
+            }
+        }
+    </style>
+</head>
+<body class="stacked-seat-layout">
+    <h1>快速排座位</h1>
+    <div class="container">
+        <div class="panel import-controls">
+            <h3>导入名单</h3>
+            <h4>导入男生</h4>
+            <textarea id="maleInput" placeholder="01 张三&#10;02 李四"></textarea>
+            <button onclick="loadStudents('male')">导入男生</button>
+            <h4>导入女生</h4>
+            <textarea id="femaleInput" placeholder="03 王红&#10;04 李丽"></textarea>
+            <button onclick="loadStudents('female')">导入女生</button>
+            <div class="controls">
+                <button onclick="saveStudents()">保存名单</button>
+                <button onclick="loadStudentsFile()">加载名单</button>
+                <button onclick="clearStudents()">清空全部学生</button>
+            </div>
+            
+            <div id="leaderBox">
+                <h4>标记小组长 (拖入学生到此)</h4>
+            </div>
+            <div id="talkativeBox">
+                <h4>标记爱讲话学生 (拖入学生到此)</h4>
+            </div>
+            <div id="annotationBox">
+                <h4>添加/取消自定义标注 (拖入学生到此)</h4>
+                <div class="annotation-settings">
+                    <label for="annotationInput">标签内容</label>
+                    <input id="annotationInput" value="静" maxlength="24" aria-describedby="annotationTip">
+                </div>
+                <div id="annotationTip" class="annotation-tip">多个标签可用空格、逗号或顿号分隔</div>
+            </div>
+        </div>
+
+        <div class="panel male-list">
+            <h3>未排座位男生 <span id="maleCount" class="count-badge">0</span></h3>
+            <div id="maleStudentsContainer" class="student-list-container" aria-label="未排座位男生拖放区域"></div>
+        </div>
+
+        <div class="panel female-list">
+            <h3>未排座位女生 <span id="femaleCount" class="count-badge">0</span></h3>
+            <div id="femaleStudentsContainer" class="student-list-container" aria-label="未排座位女生拖放区域"></div>
+        </div>
+
+        <div class="panel seat-area" id="seatArea">
+            <h3>座位表</h3>
+            <div id="seatSummary" class="seat-summary" aria-live="polite"></div>
+            <div class="seat-config">
+                <label>行数:</label>
+                <input type="number" id="rowsInput" value="8" min="1" max="20">
+                <label>座位列数:</label>
+                <input type="number" id="colsInput" value="8" min="1" max="20">
+                <label for="seatLayoutSelect">显示:</label>
+                <select id="seatLayoutSelect" onchange="setSeatLayout(this.value)">
+                    <option value="stacked" selected>学号 / 姓名 / 标签（三行居中）</option>
+                    <option value="compact">编号分离（紧凑）</option>
+                    <option value="inline">编号姓名同行（宽松）</option>
+                </select>
+                <button onclick="generateTable()" title="这将清空当前所有座位并重新生成空表格">重置座位表格</button>
+            </div>
+            <div class="auto-seat-controls">
+                <button onclick="autoSeat()">随机排座</button>
+            </div>
+            <table id="seatTable"></table>
+            <div class="podium">讲台</div>
+            <div class="controls">
+                <button onclick="exportSeatsTeacher()">导出老师视角表格</button>
+                <button onclick="exportSeatsStudent()">导出学生视角表格</button>
+                <button onclick="clearSeats(true)">清空座位表</button>
+                <button onclick="saveSeats()">保存座位表</button>
+                <button onclick="loadSeats()">加载座位表</button>
+                <button onclick="exportPDF()">导出老师视角 A4 矢量 PDF</button>
+                <button onclick="exportPDFReversed()">导出学生视角 A4 矢量 PDF</button>
+            </div>
+            <textarea id="outputArea" placeholder="这里将生成可复制到Excel的表格"></textarea>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+        const seatTable = document.getElementById("seatTable");
+        const outputArea = document.getElementById("outputArea");
+        const maleStudentsContainer = document.getElementById("maleStudentsContainer");
+        const femaleStudentsContainer = document.getElementById("femaleStudentsContainer");
+        const rowsInput = document.getElementById("rowsInput");
+        const colsInput = document.getElementById("colsInput");
+        const seatLayoutSelect = document.getElementById("seatLayoutSelect");
+        const leaderBox = document.getElementById("leaderBox");
+        const talkativeBox = document.getElementById("talkativeBox");
+        const annotationBox = document.getElementById("annotationBox");
+        const annotationInput = document.getElementById("annotationInput");
+        const annotationTip = document.getElementById("annotationTip");
+        const maleCount = document.getElementById("maleCount");
+        const femaleCount = document.getElementById("femaleCount");
+        const seatSummary = document.getElementById("seatSummary");
+
+        let draggedEl = null;
+        let originalParent = null;
+
+        // 新增：用于全局保存动态激活的过道位置的集合（1代表第1列和第2列之间有过道）
+        let activeAisles = new Set();
+
+        function formatDateForFilename(date = new Date()) {
+            return `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月${String(date.getDate()).padStart(2, '0')}日`;
+        }
+
+        function getAnnotation(element) {
+            return element && typeof element.dataset.annotation === 'string'
+                ? element.dataset.annotation.trim()
+                : '';
+        }
+
+        function parseAnnotationLabels(annotation) {
+            return String(annotation || '')
+                .split(/[\s,，、;；|\/]+/)
+                .map(label => label.trim())
+                .filter((label, index, labels) => label && labels.indexOf(label) === index);
+        }
+
+        function setSeatLayout(mode) {
+            const layoutMode = ['stacked', 'compact', 'inline'].includes(mode) ? mode : 'stacked';
+            document.body.classList.toggle('stacked-seat-layout', layoutMode === 'stacked');
+            document.body.classList.toggle('compact-seat-layout', layoutMode === 'compact');
+            seatLayoutSelect.value = layoutMode;
+        }
+
+        function renderStudentContent(element, name, annotation = '') {
+            if (!element) return;
+            const buttons = element.tagName.toLowerCase() === 'td'
+                ? Array.from(element.querySelectorAll('.aisle-control-btn'))
+                : [];
+            const cleanName = String(name || '').trim();
+            const cleanAnnotation = String(annotation || '').trim();
+            element.innerHTML = '';
+            element.dataset.studentName = cleanName;
+            if (cleanName) {
+                const content = document.createElement('span');
+                content.className = 'student-content';
+                const identity = document.createElement('span');
+                identity.className = 'student-identity';
+                const seatNameParts = element.tagName.toLowerCase() === 'td'
+                    ? cleanName.match(/^(\d+)\s+(.+)$/)
+                    : null;
+                if (seatNameParts) {
+                    const numberSpan = document.createElement('span');
+                    numberSpan.className = 'student-number';
+                    numberSpan.textContent = seatNameParts[1];
+                    numberSpan.setAttribute('aria-hidden', 'true');
+                    identity.appendChild(numberSpan);
+                }
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'student-name';
+                nameSpan.textContent = seatNameParts ? seatNameParts[2] : cleanName;
+                nameSpan.title = cleanName;
+                identity.appendChild(nameSpan);
+                content.appendChild(identity);
+                if (cleanAnnotation) {
+                    element.dataset.annotation = cleanAnnotation;
+                    element.classList.add('has-annotation');
+                    const annotationsSpan = document.createElement('span');
+                    annotationsSpan.className = 'student-annotations';
+                    annotationsSpan.title = `标注：${cleanAnnotation}`;
+                    annotationsSpan.setAttribute('aria-label', `标注：${cleanAnnotation}`);
+                    parseAnnotationLabels(cleanAnnotation).forEach(label => {
+                        const annotationSpan = document.createElement('span');
+                        annotationSpan.className = 'student-annotation';
+                        annotationSpan.textContent = label;
+                        annotationsSpan.appendChild(annotationSpan);
+                    });
+                    content.appendChild(annotationsSpan);
+                } else {
+                    delete element.dataset.annotation;
+                    element.classList.remove('has-annotation');
+                }
+                element.appendChild(content);
+            } else {
+                delete element.dataset.annotation;
+                element.classList.remove('has-annotation');
+            }
+            buttons.forEach(btn => element.appendChild(btn));
+        }
+
+        // 辅助函数：安全获取座位上的学生名字（标签和控制按钮均不计入姓名）
+        function getStudentName(cell) {
+            if (!cell) return "";
+            if (typeof cell.dataset.studentName === 'string') return cell.dataset.studentName.trim();
+            const nameSpan = cell.querySelector('.student-name');
+            if (nameSpan) return nameSpan.textContent.trim();
+            let clonedCell = cell.cloneNode(true);
+            clonedCell.querySelectorAll('.aisle-control-btn, .student-annotations').forEach(b => b.remove());
+            return clonedCell.textContent.trim();
+        }
+
+        // 辅助函数：安全设置座位上的学生名字（保留控制按钮）
+        function setStudentName(cell, name, annotation = getAnnotation(cell)) {
+            if (!cell) return;
+            renderStudentContent(cell, name, annotation);
+        }
+
+        function normalizeGender(gender) {
+            return gender === 'male' || gender === 'female' ? gender : null;
+        }
+
+        function getStudentRecord(element) {
+            if (!element) return null;
+            const name = getStudentName(element);
+            const gender = normalizeGender(element.dataset.gender);
+            if (!name || !gender) return null;
+            return {
+                name,
+                gender,
+                isLeader: element.classList.contains('leader'),
+                isTalkative: element.classList.contains('talkative'),
+                annotation: getAnnotation(element)
+            };
+        }
+
+        function getSeatCells() {
+            return Array.from(seatTable.querySelectorAll('td:not(.aisle)'));
+        }
+
+        function studentKey(name, gender) {
+            return `${gender}\u0000${name.trim()}`;
+        }
+
+        function studentExists(name, gender, excludeElement = null) {
+            const key = studentKey(name, gender);
+            const listStudents = [
+                ...maleStudentsContainer.children,
+                ...femaleStudentsContainer.children
+            ];
+            const allElements = [...listStudents, ...getSeatCells()];
+            return allElements.some(element => {
+                if (element === excludeElement) return false;
+                const record = getStudentRecord(element);
+                return record && studentKey(record.name, record.gender) === key;
+            });
+        }
+
+        function removeStudentFromList(name, gender) {
+            const container = gender === 'male' ? maleStudentsContainer : femaleStudentsContainer;
+            const key = studentKey(name, gender);
+            const element = Array.from(container.children).find(student => {
+                const record = getStudentRecord(student);
+                return record && studentKey(record.name, record.gender) === key;
+            });
+            if (element) element.remove();
+            return Boolean(element);
+        }
+
+        function clearSeatCell(cell) {
+            if (!cell || cell.classList.contains('aisle')) return;
+            setStudentName(cell, "", "");
+            cell.style.backgroundColor = "#f0efeb";
+            cell.style.border = '';
+            cell.classList.remove('leader', 'talkative', 'has-annotation');
+            delete cell.dataset.studentName;
+            delete cell.dataset.annotation;
+            delete cell.dataset.gender;
+            cell.draggable = false;
+            cell.title = "将学生拖到这里";
+            cell.setAttribute('aria-label', '空座位');
+        }
+
+        function applyStudentToSeat(cell, student) {
+            if (!cell || !student) return;
+            setStudentName(cell, student.name, student.annotation || '');
+            cell.dataset.gender = student.gender;
+            cell.style.backgroundColor = student.gender === "male" ? "#add8e6" : "#f6c1c1";
+            cell.style.border = '';
+            student.isLeader ? cell.classList.add('leader') : cell.classList.remove('leader');
+            student.isTalkative ? cell.classList.add('talkative') : cell.classList.remove('talkative');
+            cell.draggable = true;
+            cell.title = "拖动调整座位；双击或按 Delete 退回未排区";
+            cell.setAttribute('aria-label', `${student.name}，双击或按 Delete 退回未排区`);
+        }
+
+        function returnSeatToList(cell) {
+            const student = getStudentRecord(cell);
+            if (!student) return false;
+            if (studentExists(student.name, student.gender, cell)) {
+                alert(`${student.name} 已在未排区或其他座位中，未执行退回操作。`);
+                return false;
+            }
+            clearSeatCell(cell);
+            addStudent(student.name, student.gender, student.isLeader, student.isTalkative, null, student.annotation);
+            sortStudentList(student.gender);
+            updateSummary();
+            return true;
+        }
+
+        function collectAllStudents() {
+            const students = [];
+            const seen = new Set();
+            const elements = [
+                ...maleStudentsContainer.children,
+                ...femaleStudentsContainer.children,
+                ...getSeatCells()
+            ];
+            elements.forEach(element => {
+                const student = getStudentRecord(element);
+                if (!student) return;
+                const key = studentKey(student.name, student.gender);
+                if (seen.has(key)) return;
+                seen.add(key);
+                students.push(student);
+            });
+            return students;
+        }
+
+        function updateSummary() {
+            const assigned = getSeatCells().filter(cell => getStudentName(cell) !== "").length;
+            const capacity = getSeatCells().length;
+            maleCount.textContent = maleStudentsContainer.children.length;
+            femaleCount.textContent = femaleStudentsContainer.children.length;
+            seatSummary.textContent = `已排 ${assigned} 人 / ${capacity} 个座位，未排 ${maleStudentsContainer.children.length + femaleStudentsContainer.children.length} 人`;
+        }
+
+        function clearDropHighlights() {
+            document.querySelectorAll('.drag-over').forEach(element => element.classList.remove('drag-over'));
+        }
+
+        [maleStudentsContainer, femaleStudentsContainer].forEach(container => {
+            container.addEventListener("dragover", dragOver);
+            container.addEventListener("drop", drop);
+            container.addEventListener("dragleave", dragLeave);
+        });
+
+        function bindMarkerBox(box, className) {
+            box.addEventListener("dragover", dragOver);
+            box.addEventListener("drop", (e) => {
+                e.preventDefault();
+                box.classList.remove("drag-over");
+                if (!draggedEl || !getStudentRecord(draggedEl)) return;
+                draggedEl.classList.toggle(className);
+                const student = getStudentRecord(draggedEl);
+                if (draggedEl.tagName.toLowerCase() === 'td' && student) {
+                    applyStudentToSeat(draggedEl, student);
+                }
+                updateSummary();
+            });
+            box.addEventListener("dragleave", dragLeave);
+        }
+
+        bindMarkerBox(leaderBox, 'leader');
+        bindMarkerBox(talkativeBox, 'talkative');
+
+        annotationInput.addEventListener('input', () => {
+            const labels = parseAnnotationLabels(annotationInput.value);
+            annotationTip.textContent = labels.length > 1
+                ? `将添加 ${labels.length} 个标签，并在第三行居中排列`
+                : '多个标签可用空格、逗号或顿号分隔';
+        });
+
+        annotationBox.addEventListener('dragover', dragOver);
+        annotationBox.addEventListener('drop', (e) => {
+            e.preventDefault();
+            annotationBox.classList.remove('drag-over');
+            const student = getStudentRecord(draggedEl);
+            if (!draggedEl || !student) return;
+            const inputLabels = parseAnnotationLabels(annotationInput.value);
+            if (!inputLabels.length) {
+                alert('请先填写标签内容。');
+                return;
+            }
+            const currentLabels = parseAnnotationLabels(student.annotation);
+            const shouldRemove = inputLabels.every(label => currentLabels.includes(label));
+            const nextLabels = shouldRemove
+                ? currentLabels.filter(label => !inputLabels.includes(label))
+                : [...currentLabels, ...inputLabels.filter(label => !currentLabels.includes(label))];
+            student.annotation = nextLabels.join('、');
+            if (draggedEl.tagName.toLowerCase() === 'td') {
+                applyStudentToSeat(draggedEl, student);
+            } else {
+                renderStudentContent(draggedEl, student.name, student.annotation);
+            }
+            updateSummary();
+        });
+        annotationBox.addEventListener('dragleave', dragLeave);
+
+        document.addEventListener("dragend", () => {
+            if (draggedEl) draggedEl.style.opacity = '1';
+            clearDropHighlights();
+            draggedEl = null;
+            originalParent = null;
+        });
+
+        /**
+         * 初始化座位表格 (含动态控制逻辑)
+         */
+        function initTable(rows = 8, cols = 8, doClear = true) {
+            if (doClear) {
+                clearSeats(false); // 如果重绘时不保留数据，清空内容并不退回学生
+            }
+            
+            seatTable.innerHTML = "";
+            for (let r = 0; r < rows; r++) {
+                const row = seatTable.insertRow();
+                for (let c = 0; c < cols; c++) {
+                    // 1. 生成实际座位
+                    const cell = row.insertCell();
+                    cell.addEventListener("dragover", dragOver);
+                    cell.addEventListener("drop", drop);
+                    cell.addEventListener("dragleave", dragLeave);
+                    
+                    cell.draggable = false;
+                    cell.tabIndex = 0;
+                    cell.title = "将学生拖到这里";
+                    cell.setAttribute('aria-label', '空座位');
+                    cell.addEventListener("dragstart", dragStart);
+                    cell.addEventListener("dblclick", () => returnSeatToList(cell));
+                    cell.addEventListener("keydown", (e) => {
+                        if (e.target.closest('.aisle-control-btn')) return;
+                        if ((e.key === 'Delete' || e.key === 'Backspace') && getStudentName(cell) !== "") {
+                            e.preventDefault();
+                            returnSeatToList(cell);
+                        }
+                    });
+
+                    // 检查此列之后是否有激活的过道
+                    const isAisleActive = activeAisles.has(c + 1);
+
+                    // 2. 如果右边没有过道，在第一行当前座位右边缘放置一个添加"+"按钮
+                    if (r === 0 && c < cols - 1 && !isAisleActive) {
+                        const btn = document.createElement("button");
+                        btn.className = "aisle-control-btn add";
+                        btn.textContent = "+";
+                        btn.title = "在此处添加过道";
+                        btn.onclick = (e) => {
+                            e.stopPropagation();
+                            activeAisles.add(c + 1);
+                            rebuildTableKeepData();
+                        };
+                        cell.appendChild(btn);
+                    }
+
+                    // 3. 如果右边激活了过道，生成专门的占位空列
+                    if (isAisleActive && c < cols - 1) {
+                        const aisleCell = row.insertCell();
+                        aisleCell.className = "aisle";
+                        
+                        // 在第一行的过道列内放置一个移除"-"按钮
+                        if (r === 0) {
+                            const btn = document.createElement("button");
+                            btn.className = "aisle-control-btn remove";
+                            btn.textContent = "-";
+                            btn.title = "移除该过道";
+                            btn.onclick = (e) => {
+                                e.stopPropagation();
+                                activeAisles.delete(c + 1);
+                                rebuildTableKeepData();
+                            };
+                            aisleCell.appendChild(btn);
+                        }
+                    }
+                }
+            }
+            updateSummary();
+        }
+
+        /**
+         * 在保证桌上已经排好的学生不丢失的前提下，重新渲染过道
+         */
+        function rebuildTableKeepData() {
+            // 1. 读取当前桌上所有学生数据
+            const data = [];
+            const rows = seatTable.rows;
+            for (let r = 0; r < rows.length; r++) {
+                const cells = rows[r].cells;
+                let logicalCol = 0; 
+                for (let c = 0; c < cells.length; c++) {
+                    const cell = cells[c];
+                    if (cell.classList.contains('aisle')) continue;
+
+                    const studentName = getStudentName(cell);
+                    if (studentName !== "") {
+                        data.push({ 
+                            row: r, 
+                            col: logicalCol, 
+                            name: studentName, 
+                            gender: cell.dataset.gender, 
+                            isLeader: cell.classList.contains('leader'),
+                            isTalkative: cell.classList.contains('talkative'),
+                            annotation: getAnnotation(cell)
+                        });
+                    }
+                    logicalCol++; 
+                }
+            }
+            
+            // 2. 使用新布局重新绘制DOM (无需触发数据清理逻辑)
+            initTable(parseInt(rowsInput.value), parseInt(colsInput.value), false);
+            
+            // 3. 将刚刚读到的学生放回新生成的格子中
+            data.forEach(item => {
+                if (item.row < seatTable.rows.length) {
+                    const seatCells = seatTable.rows[item.row].querySelectorAll('td:not(.aisle)');
+                    if (item.col < seatCells.length) {
+                        const cell = seatCells[item.col];
+                        applyStudentToSeat(cell, item);
+                    }
+                }
+            });
+            updateSummary();
+        }
+
+        function generateTable() {
+            const rows = parseInt(rowsInput.value) || 8;
+            const cols = parseInt(colsInput.value) || 8;
+            
+            // 避免因列数减少导致无效的过道存留
+            const newActiveAisles = new Set();
+            activeAisles.forEach(col => {
+                if (col < cols) newActiveAisles.add(col);
+            });
+            activeAisles = newActiveAisles;
+
+            // 完全重置模式：先把人都清回待排区，再生成表格
+            clearSeats(true);
+            initTable(rows, cols, false);
+            updateSummary();
+        }
+        
+        function loadStudents(type) {
+            const input = type === "male" ? document.getElementById("maleInput").value.trim() : document.getElementById("femaleInput").value.trim();
+            const names = input.split("\n").map(n => n.trim()).filter(n => n);
+
+            if (type === "male") {
+                document.getElementById("maleInput").value = '';
+            } else {
+                document.getElementById("femaleInput").value = '';
+            }
+
+            let duplicateCount = 0;
+            names.forEach(name => {
+                if (!addStudent(name, type, false, false)) duplicateCount++;
+            });
+            sortStudentList(type);
+            updateSummary();
+            if (duplicateCount > 0) {
+                alert(`已跳过 ${duplicateCount} 条重复学生记录。`);
+            }
+        }
+
+        function addStudent(name, type, isLeader = false, isTalkative = false, excludeElement = null, annotation = '') {
+            name = String(name || '').trim();
+            type = normalizeGender(type);
+            if (!name || !type || studentExists(name, type, excludeElement)) return false;
+            const el = document.createElement("div");
+            el.className = `student ${type}`;
+            renderStudentContent(el, name, annotation);
+            el.draggable = true;
+            el.dataset.gender = type;
+            el.title = "拖到座位；也可拖到标记区域";
+            if (isLeader) {
+                el.classList.add('leader');
+            }
+            if (isTalkative) {
+                el.classList.add('talkative');
+            }
+            el.addEventListener("dragstart", dragStart);
+            if (type === 'male') {
+                maleStudentsContainer.appendChild(el);
+            } else {
+                femaleStudentsContainer.appendChild(el);
+            }
+            updateSummary();
+            return true;
+        }
+
+        function dragStart(e) {
+            draggedEl = e.currentTarget;
+            if (e.target.closest('.aisle-control-btn')) {
+                e.preventDefault();
+                draggedEl = null;
+                originalParent = null;
+                return;
+            }
+            if (!getStudentRecord(draggedEl)) {
+                e.preventDefault();
+                draggedEl = null;
+                originalParent = null;
+                return;
+            }
+            originalParent = draggedEl.parentNode;
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', getStudentRecord(draggedEl).name);
+            }
+            const activeElement = draggedEl;
+            setTimeout(() => {
+                if (activeElement) activeElement.style.opacity = '0.5';
+            }, 0);
+        }
+        
+        function dragOver(e) {
+            e.preventDefault();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+            const target = e.target.closest('td:not(.aisle)') || e.target.closest('.student-list-container') || e.target.closest('#leaderBox') || e.target.closest('#talkativeBox') || e.target.closest('#annotationBox');
+            if (target) {
+                target.classList.add("drag-over");
+            }
+        }
+
+        function dragLeave(e) {
+            const target = e.target.closest('td:not(.aisle)') || e.target.closest('.student-list-container') || e.target.closest('#leaderBox') || e.target.closest('#talkativeBox') || e.target.closest('#annotationBox');
+            if (target && e.relatedTarget && target.contains(e.relatedTarget)) return;
+            if (target) {
+                target.classList.remove("drag-over");
+            }
+        }
+        
+        function drop(e) {
+            e.preventDefault();
+            const target = e.target.closest('td:not(.aisle)') || e.target.closest('.student-list-container') || e.target.closest('#leaderBox') || e.target.closest('#talkativeBox') || e.target.closest('#annotationBox');
+            if (target) {
+                 target.classList.remove("drag-over");
+            }
+            if (!draggedEl) return;
+        
+            const targetCell = e.target.closest('td:not(.aisle)');
+            const targetListContainer = e.target.closest('.student-list-container');
+            const draggedStudent = getStudentRecord(draggedEl);
+            if (!draggedStudent) return;
+
+            if (targetCell) {
+                if (targetCell === draggedEl) return;
+                const targetStudent = getStudentRecord(targetCell);
+                const draggedFromList = originalParent === maleStudentsContainer || originalParent === femaleStudentsContainer;
+
+                if (!targetStudent) {
+                    applyStudentToSeat(targetCell, draggedStudent);
+                    if (draggedFromList) draggedEl.remove();
+                    else clearSeatCell(draggedEl);
+                } else if (draggedFromList) {
+                    clearSeatCell(targetCell);
+                    addStudent(targetStudent.name, targetStudent.gender, targetStudent.isLeader, targetStudent.isTalkative, null, targetStudent.annotation);
+                    applyStudentToSeat(targetCell, draggedStudent);
+                    draggedEl.remove();
+                    sortStudentList(targetStudent.gender);
+                } else {
+                    applyStudentToSeat(draggedEl, targetStudent);
+                    applyStudentToSeat(targetCell, draggedStudent);
+                }
+            } else if (targetListContainer && draggedEl.tagName.toLowerCase() === 'td') {
+                returnSeatToList(draggedEl);
+            }
+            updateSummary();
+        }
+        
+        function sortStudentList(type) {
+            const container = type === 'male' ? maleStudentsContainer : femaleStudentsContainer;
+            const students = Array.from(container.children);
+            students.sort((a, b) => {
+                const numA = parseInt(getStudentName(a).split(" ")[0]) || 0;
+                const numB = parseInt(getStudentName(b).split(" ")[0]) || 0;
+                return numA - numB;
+            });
+            students.forEach(el => container.appendChild(el));
+        }
+
+        function clearSeats(returnToStudents = true) {
+            const rows = seatTable.rows;
+            for (let r = 0; r < rows.length; r++) {
+                const cells = rows[r].cells;
+                for (let c = 0; c < cells.length; c++) {
+                    const cell = cells[c];
+                    
+                    if (cell.classList.contains('aisle')) continue;
+
+                    const student = getStudentRecord(cell);
+                    if (student && returnToStudents) {
+                        addStudent(student.name, student.gender, student.isLeader, student.isTalkative, cell, student.annotation);
+                    }
+                    clearSeatCell(cell);
+                }
+            }
+            if (returnToStudents) {
+                sortStudentList('male');
+                sortStudentList('female');
+            }
+            updateSummary();
+        }
+
+        function clearStudentLists() {
+            maleStudentsContainer.innerHTML = "";
+            femaleStudentsContainer.innerHTML = "";
+            updateSummary();
+        }
+
+        function clearStudents() {
+            if (!confirm('这会清空未排区和座位表中的全部学生，是否继续？')) return;
+            clearStudentLists();
+            clearSeats(false);
+            document.getElementById("maleInput").value = '';
+            document.getElementById("femaleInput").value = '';
+            updateSummary();
+        }
+
+        function exportSeatsTeacher() {
+            let rows = [];
+            for (let r = 0; r < seatTable.rows.length; r++) {
+                let cols = [];
+                for (let c = 0; c < seatTable.rows[r].cells.length; c++) {
+                    const cell = seatTable.rows[r].cells[c];
+                    if (cell.classList.contains('aisle')) {
+                        cols.push(""); 
+                        continue;
+                    }
+                    cols.push(getStudentName(cell)); 
+                }
+                rows.push(cols.join("\t"));
+            }
+            outputArea.value = rows.join("\n");
+        }
+
+        function exportSeatsStudent() {
+            let outputRows = [];
+            const numRows = seatTable.rows.length;
+            
+            for (let r = numRows - 1; r >= 0; r--) { 
+                let outputCols = [];
+                const numCols = seatTable.rows[r].cells.length;
+                
+                for (let c = numCols - 1; c >= 0; c--) { 
+                    const cell = seatTable.rows[r].cells[c];
+                    if (cell.classList.contains('aisle')) {
+                        outputCols.push(""); 
+                        continue;
+                    }
+                    outputCols.push(getStudentName(cell)); 
+                }
+                outputRows.push(outputCols.join("\t"));
+            }
+            outputArea.value = outputRows.join("\n");
+        }
+
+
+        function saveSeats() {
+            const data = [];
+            const rows = seatTable.rows;
+            for (let r = 0; r < rows.length; r++) {
+                const cells = rows[r].cells;
+                let logicalCol = 0; 
+                for (let c = 0; c < cells.length; c++) {
+                    const cell = cells[c];
+                    if (cell.classList.contains('aisle')) continue;
+
+                    const studentName = getStudentName(cell);
+                    if (studentName !== "") {
+                        data.push({ 
+                            row: r, 
+                            col: logicalCol, 
+                            name: studentName, 
+                            gender: cell.dataset.gender, 
+                            isLeader: cell.classList.contains('leader'),
+                            isTalkative: cell.classList.contains('talkative'),
+                            annotation: getAnnotation(cell)
+                        });
+                    }
+                    logicalCol++; 
+                }
+            }
+            
+            const exportData = {
+                version: 3,
+                rows: seatTable.rows.length,
+                cols: seatTable.rows.length ? seatTable.rows[0].querySelectorAll('td:not(.aisle)').length : 0,
+                aisles: Array.from(activeAisles).sort((a, b) => a - b),
+                seats: data
+            };
+
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+            const a = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            a.href = url;
+            a.download = `座位表_${formatDateForFilename()}.json`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+        }
+        
+        function loadSeats() {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = ".json";
+            input.onchange = e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                    try {
+                        const parsedData = JSON.parse(reader.result);
+                        const isLegacyArray = Array.isArray(parsedData);
+                        const seatsData = isLegacyArray ? parsedData : parsedData && parsedData.seats;
+                        if (!Array.isArray(seatsData)) throw new Error('座位数据不是数组');
+
+                        const validSeats = seatsData.map(item => ({
+                            row: Number(item.row),
+                            col: Number(item.col),
+                            name: typeof item.name === 'string' ? item.name.trim() : '',
+                            gender: normalizeGender(item.gender),
+                            isLeader: Boolean(item.isLeader),
+                            isTalkative: Boolean(item.isTalkative),
+                            annotation: item && typeof item.annotation === 'string' ? item.annotation.trim() : ''
+                        })).filter(item => Number.isInteger(item.row) && item.row >= 0 &&
+                            Number.isInteger(item.col) && item.col >= 0 && item.name && item.gender);
+
+                        const inferredRows = validSeats.length ? Math.max(...validSeats.map(item => item.row)) + 1 : 8;
+                        const inferredCols = validSeats.length ? Math.max(...validSeats.map(item => item.col)) + 1 : 8;
+                        const requestedRows = !isLegacyArray ? Number(parsedData.rows) : NaN;
+                        const requestedCols = !isLegacyArray ? Number(parsedData.cols) : NaN;
+                        const rows = Math.min(20, Math.max(1, Number.isInteger(requestedRows) ? requestedRows : inferredRows));
+                        const cols = Math.min(20, Math.max(1, Number.isInteger(requestedCols) ? requestedCols : inferredCols));
+
+                        let aisleValues = !isLegacyArray ? parsedData.aisles : [];
+                        if (typeof aisleValues === 'string') aisleValues = aisleValues.split(',');
+                        if (!Array.isArray(aisleValues)) aisleValues = [];
+                        const newAisles = new Set(aisleValues.map(value => Number(value))
+                            .filter(value => Number.isInteger(value) && value > 0 && value < cols));
+
+                        // 文件解析和校验成功后再改动当前座位，避免坏文件清空现有数据。
+                        clearSeats(true);
+                        activeAisles = newAisles;
+                        rowsInput.value = rows;
+                        colsInput.value = cols;
+                        initTable(rows, cols, false);
+
+                        const loadedStudents = new Set();
+                        let skippedCount = seatsData.length - validSeats.length;
+                        validSeats.forEach(item => {
+                            if (item.row >= rows || item.col >= cols) {
+                                skippedCount++;
+                                return;
+                            }
+                            const key = studentKey(item.name, item.gender);
+                            if (loadedStudents.has(key)) {
+                                skippedCount++;
+                                return;
+                            }
+                            const seatCells = seatTable.rows[item.row].querySelectorAll('td:not(.aisle)');
+                            const cell = seatCells[item.col];
+                            if (!cell || getStudentName(cell) !== "") {
+                                skippedCount++;
+                                return;
+                            }
+                            loadedStudents.add(key);
+                            removeStudentFromList(item.name, item.gender);
+                            applyStudentToSeat(cell, item);
+                        });
+                        sortStudentList('male');
+                        sortStudentList('female');
+                        updateSummary();
+                        if (skippedCount > 0) alert(`已跳过 ${skippedCount} 条无效或重复座位记录。`);
+                    } catch (error) {
+                        alert("加载座位表文件失败，请检查文件格式。");
+                        console.error("Error loading seats:", error);
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        function saveStudents() {
+            const allNames = collectAllStudents();
+            const blob = new Blob([JSON.stringify(allNames, null, 2)], { type: "application/json" });
+            const a = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            a.href = url;
+            a.download = `学生名单_${formatDateForFilename()}.json`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+        }
+        
+        function loadStudentsFile() {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = ".json";
+            input.onchange = e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                    try {
+                        const data = JSON.parse(reader.result);
+                        if (!Array.isArray(data)) throw new Error('名单数据不是数组');
+                        const validStudents = data.map(item => ({
+                            name: item && typeof item.name === 'string' ? item.name.trim() : '',
+                            gender: item ? normalizeGender(item.gender) : null,
+                            isLeader: Boolean(item && item.isLeader),
+                            isTalkative: Boolean(item && item.isTalkative),
+                            annotation: item && typeof item.annotation === 'string' ? item.annotation.trim() : ''
+                        })).filter(item => item.name && item.gender);
+
+                        clearStudentLists();
+                        const seen = new Set();
+                        let skippedCount = data.length - validStudents.length;
+                        validStudents.forEach(item => {
+                            const key = studentKey(item.name, item.gender);
+                            if (seen.has(key)) {
+                                skippedCount++;
+                                return;
+                            }
+                            seen.add(key);
+                            const occupiedCell = getSeatCells().find(cell => {
+                                const current = getStudentRecord(cell);
+                                return current && studentKey(current.name, current.gender) === key;
+                            });
+                            if (occupiedCell) applyStudentToSeat(occupiedCell, item);
+                            else addStudent(item.name, item.gender, item.isLeader, item.isTalkative, null, item.annotation);
+                        });
+                        sortStudentList('male');
+                        sortStudentList('female');
+                        updateSummary();
+                        if (skippedCount > 0) alert(`已跳过 ${skippedCount} 条无效或重复名单记录。`);
+                    } catch (error) {
+                        alert("加载学生名单文件失败，请检查文件格式。");
+                        console.error("Error loading students:", error);
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        // PDF 使用同一份静态中文粗体字形，避免 Windows/macOS 的系统字体回退造成外观差异。
+        const PDF_CHINESE_FONT_URL = 'https://raw.githubusercontent.com/catusf/NanGuo-Fonts/main/sources/Heiti/base-font/NotoSansSC-Bold.ttf';
+        let pdfChineseFontPromise = null;
+
+        function arrayBufferToBase64(buffer) {
+            const bytes = new Uint8Array(buffer);
+            const chunkSize = 0x8000;
+            let binary = '';
+            for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+                binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+            }
+            return btoa(binary);
+        }
+
+        function loadPdfChineseFont() {
+            if (!pdfChineseFontPromise) {
+                pdfChineseFontPromise = fetch(PDF_CHINESE_FONT_URL)
+                    .then(response => {
+                        if (!response.ok) throw new Error(`字体下载失败：HTTP ${response.status}`);
+                        return response.arrayBuffer();
+                    })
+                    .then(arrayBufferToBase64)
+                    .catch(error => {
+                        pdfChineseFontPromise = null;
+                        throw error;
+                    });
+            }
+            return pdfChineseFontPromise;
+        }
+
+        function drawVectorGradient(pdf, key, x, y, width, height, radius, colors) {
+            pdf.advancedAPI(doc => {
+                const pattern = new doc.ShadingPattern('axial', [x, y, x + width, y], colors);
+                doc.addShadingPattern(key, pattern);
+                doc.roundedRect(x, y, width, height, radius, radius);
+                doc.fill({ key, matrix: new doc.Matrix(1, 0, 0, 1, 0, 0) });
+            });
+        }
+
+        function ellipsizePdfText(pdf, text, maxWidth) {
+            if (pdf.getTextWidth(text) <= maxWidth) return text;
+            const ellipsis = '…';
+            if (pdf.getTextWidth(ellipsis) > maxWidth) return '';
+            let result = text;
+            while (result && pdf.getTextWidth(result + ellipsis) > maxWidth) {
+                result = result.slice(0, -1);
+            }
+            return result + ellipsis;
+        }
+
+        function drawPdfAnnotationRow(pdf, annotation, x, centerY, maxWidth, fontSize, unitScale) {
+            let labels = parseAnnotationLabels(annotation);
+            if (!labels.length) return;
+            const fontHeight = fontSize * 0.352778;
+            const gap = 2 * unitScale;
+            const minBoxWidth = fontHeight * 1.3;
+            const maxVisible = Math.max(1, Math.floor((maxWidth + gap) / (minBoxWidth + gap)));
+            if (labels.length > maxVisible) {
+                labels = labels.slice(0, maxVisible);
+                labels[labels.length - 1] = '…';
+            }
+            const paddingX = fontHeight * 0.25;
+            pdf.setFontSize(fontSize);
+            let boxes = labels.map(label => ({
+                label,
+                width: Math.max(minBoxWidth, pdf.getTextWidth(label) + paddingX * 2)
+            }));
+            const naturalTotal = boxes.reduce((sum, box) => sum + box.width, 0) + gap * (boxes.length - 1);
+            if (naturalTotal > maxWidth) {
+                const slotWidth = Math.max(minBoxWidth, (maxWidth - gap * (boxes.length - 1)) / boxes.length);
+                boxes = boxes.map(box => ({
+                    label: ellipsizePdfText(pdf, box.label, Math.max(0, slotWidth - paddingX * 2)),
+                    width: slotWidth
+                }));
+            }
+            const totalWidth = boxes.reduce((sum, box) => sum + box.width, 0) + gap * (boxes.length - 1);
+            const boxHeight = fontHeight * 1.15;
+            let currentX = x + (maxWidth - totalWidth) / 2;
+            boxes.forEach(box => {
+                const boxY = centerY - boxHeight / 2;
+                pdf.setFillColor(95, 111, 134);
+                pdf.roundedRect(currentX, boxY, box.width, boxHeight,
+                    4 * unitScale, 4 * unitScale, 'F');
+                pdf.setTextColor(255, 255, 255);
+                pdf.text(box.label, currentX + box.width / 2,
+                    centerY + fontHeight * 0.34, { align: 'center' });
+                currentX += box.width + gap;
+            });
+        }
+
+        function drawPdfStudentText(pdf, student, x, y, width, height, layoutMode, unitScale) {
+            const nameParts = student.name.match(/^(\d+)\s+(.+)$/);
+            const stackedLayout = layoutMode === 'stacked';
+            const compactLayout = layoutMode === 'compact';
+            const fullDisplayName = (stackedLayout || compactLayout) && nameParts ? nameParts[2] : student.name;
+            // 与网页 CSS 一致：姓名 20px、编号 12px、标签 0.65em，字号不随姓名长度缩小。
+            const nameFontSize = 20 * unitScale / 0.352778;
+            const annotation = student.annotation || '';
+            const annotationFontSize = nameFontSize * 0.65;
+
+            if (stackedLayout) {
+                const nameMaxWidth = width - 6 * unitScale;
+                pdf.setFontSize(nameFontSize);
+                const displayName = ellipsizePdfText(pdf, fullDisplayName, nameMaxWidth);
+                const nameCenterY = y + 33 * unitScale;
+                pdf.setTextColor(51, 51, 51);
+                pdf.text(displayName, x + width / 2,
+                    nameCenterY + nameFontSize * 0.352778 * 0.34,
+                    { align: 'center' });
+
+                if (nameParts) {
+                    const numberSize = 12 * unitScale / 0.352778;
+                    const numberCenterY = y + 9 * unitScale;
+                    pdf.setFontSize(numberSize);
+                    pdf.setTextColor(82, 94, 98);
+                    pdf.text(nameParts[1], x + width / 2,
+                        numberCenterY + numberSize * 0.352778 * 0.34,
+                        { align: 'center' });
+                }
+
+                drawPdfAnnotationRow(pdf, annotation, x + 3 * unitScale,
+                    y + 57 * unitScale, width - 6 * unitScale,
+                    annotationFontSize, unitScale);
+                return;
+            }
+
+            let annotationBoxWidth = 0;
+            const gap = annotation ? unitScale : 0;
+
+            pdf.setFontSize(annotationFontSize);
+            if (annotation) {
+                annotationBoxWidth = annotationFontSize * 0.352778 * 1.3;
+            }
+            pdf.setFontSize(nameFontSize);
+            const availableNameWidth = Math.max(unitScale, width - 2 * unitScale - annotationBoxWidth - gap);
+            const displayName = ellipsizePdfText(pdf, fullDisplayName, availableNameWidth);
+            const nameWidth = pdf.getTextWidth(displayName);
+            const totalWidth = nameWidth + annotationBoxWidth + gap;
+            const startX = x + (width - totalWidth) / 2;
+            const nameBaseline = y + height / 2 + nameFontSize * 0.352778 * 0.34;
+            pdf.setTextColor(51, 51, 51);
+            pdf.text(displayName, startX, nameBaseline);
+
+            if (compactLayout && nameParts) {
+                const numberSize = 12 * unitScale / 0.352778;
+                pdf.setFontSize(numberSize);
+                pdf.setTextColor(82, 94, 98);
+                pdf.text(nameParts[1], x + 5 * unitScale,
+                    y + 4 * unitScale + numberSize * 0.352778);
+            }
+
+            if (annotation) {
+                const boxHeight = annotationFontSize * 0.352778 * 1.45;
+                const boxX = startX + nameWidth + gap;
+                const boxY = y + (height - boxHeight) / 2;
+                pdf.setFillColor(95, 111, 134);
+                pdf.roundedRect(boxX, boxY, annotationBoxWidth, boxHeight,
+                    4 * unitScale, 4 * unitScale, 'F');
+                pdf.setFontSize(annotationFontSize);
+                pdf.setTextColor(255, 255, 255);
+                pdf.text(annotation, boxX + annotationBoxWidth / 2,
+                    boxY + boxHeight / 2 + annotationFontSize * 0.352778 * 0.34,
+                    { align: 'center' });
+            }
+        }
+
+        async function exportSeatPDF(reversed = false) {
+            if (!seatTable.rows.length) {
+                alert('请先生成座位表。');
+                return;
+            }
+            if (!window.jspdf || !window.jspdf.jsPDF) {
+                alert('PDF 组件未加载，请检查网络连接后重试。');
+                return;
+            }
+
+            const exportButtons = [
+                document.querySelector('button[onclick="exportPDF()"]'),
+                document.querySelector('button[onclick="exportPDFReversed()"]')
+            ].filter(Boolean);
+            exportButtons.forEach(button => button.disabled = true);
+            const previousCursor = document.body.style.cursor;
+            document.body.style.cursor = 'wait';
+            try {
+                const fontBase64 = await loadPdfChineseFont();
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', precision: 4 });
+                pdf.addFileToVFS('NotoSansSC-Bold.ttf', fontBase64);
+                pdf.addFont('NotoSansSC-Bold.ttf', 'NotoSansSC', 'bold');
+                pdf.setFont('NotoSansSC', 'bold');
+
+                const pageWidth = pdf.internal.pageSize.getWidth();
+                const pageHeight = pdf.internal.pageSize.getHeight();
+                const margin = 8;
+                pdf.setFillColor(255, 255, 255);
+                pdf.rect(0, 0, pageWidth, pageHeight, 'F');
+
+                const dateStr = formatDateForFilename();
+                const rowCount = seatTable.rows.length;
+                const colCount = rowCount ? seatTable.rows[0].querySelectorAll('td:not(.aisle)').length : 0;
+                const rowOrder = Array.from({ length: rowCount }, (_, index) => reversed ? rowCount - 1 - index : index);
+                const colOrder = Array.from({ length: colCount }, (_, index) => reversed ? colCount - 1 - index : index);
+                const layoutMode = document.body.classList.contains('stacked-seat-layout')
+                    ? 'stacked'
+                    : (document.body.classList.contains('compact-seat-layout') ? 'compact' : 'inline');
+                const seatWidthUnit = layoutMode === 'inline' ? 140 : 100;
+                const seatHeightUnit = layoutMode === 'stacked' ? 66 : 60;
+                const normalGapUnit = 6;
+                const aisleExtraUnit = 30;
+                const widthUnits = colCount * seatWidthUnit + Math.max(0, colCount - 1) * normalGapUnit +
+                    Array.from(activeAisles).filter(value => value > 0 && value < colCount).length * aisleExtraUnit;
+                const heightUnits = rowCount * seatHeightUnit + Math.max(0, rowCount - 1) * normalGapUnit;
+                const podiumWidthUnit = 100;
+                const podiumHeightUnit = 60;
+                const podiumGapUnit = 10;
+                const groupTopLimit = 18;
+                const groupBottomLimit = pageHeight - 1;
+                const maxTableWidth = pageWidth - margin * 2;
+                const maxGroupHeight = groupBottomLimit - groupTopLimit;
+                const unitScale = Math.min(
+                    maxTableWidth / widthUnits,
+                    maxGroupHeight / (heightUnits + podiumGapUnit + podiumHeightUnit)
+                );
+                const seatWidth = seatWidthUnit * unitScale;
+                const seatHeight = seatHeightUnit * unitScale;
+                const normalGap = normalGapUnit * unitScale;
+                const aisleExtra = aisleExtraUnit * unitScale;
+                const tableWidth = widthUnits * unitScale;
+                const tableHeight = heightUnits * unitScale;
+                const podiumWidth = podiumWidthUnit * unitScale;
+                const podiumHeight = podiumHeightUnit * unitScale;
+                const podiumGap = podiumGapUnit * unitScale;
+                const groupHeight = tableHeight + podiumGap + podiumHeight;
+                const groupY = groupTopLimit + (groupBottomLimit - groupTopLimit - groupHeight) / 2;
+                const tableX = (pageWidth - tableWidth) / 2;
+                const tableY = reversed ? groupY + podiumHeight + podiumGap : groupY;
+
+                pdf.setTextColor(51, 51, 51);
+                pdf.setFontSize(24 * unitScale / 0.352778);
+                pdf.text(`座位表 ${dateStr}`, pageWidth / 2, 13, { align: 'center' });
+
+                const xPositions = [];
+                let currentX = tableX;
+                colOrder.forEach((originalCol, displayCol) => {
+                    xPositions.push(currentX);
+                    currentX += seatWidth;
+                    if (displayCol < colOrder.length - 1) {
+                        const nextOriginalCol = colOrder[displayCol + 1];
+                        const boundary = Math.min(originalCol, nextOriginalCol) + 1;
+                        currentX += normalGap + (activeAisles.has(boundary) ? aisleExtra : 0);
+                    }
+                });
+
+                let gradientIndex = 0;
+                rowOrder.forEach((originalRow, displayRow) => {
+                    const seatCells = seatTable.rows[originalRow].querySelectorAll('td:not(.aisle)');
+                    colOrder.forEach((originalCol, displayCol) => {
+                        const cell = seatCells[originalCol];
+                        const student = getStudentRecord(cell);
+                        const x = xPositions[displayCol];
+                        const y = tableY + displayRow * (seatHeight + normalGap);
+                        const radius = 6 * unitScale;
+
+                        if (student && student.isLeader) {
+                            const isMale = student.gender === 'male';
+                            drawVectorGradient(pdf, `leaderGradient${gradientIndex++}`, x, y, seatWidth, seatHeight, radius, [
+                                { offset: 0, color: isMale ? [70, 130, 180] : [180, 121, 121] },
+                                { offset: 0.6, color: isMale ? [173, 216, 230] : [246, 193, 193] },
+                                { offset: 1, color: isMale ? [173, 216, 230] : [246, 193, 193] }
+                            ]);
+                            pdf.setLineDashPattern([], 0);
+                            pdf.setLineWidth(3 * unitScale);
+                            pdf.setDrawColor(...(isMale ? [26, 79, 120] : [140, 76, 76]));
+                            pdf.roundedRect(x, y, seatWidth, seatHeight, radius, radius, 'S');
+                        } else {
+                            const fillColor = student
+                                ? (student.gender === 'male' ? [173, 216, 230] : [246, 193, 193])
+                                : [240, 239, 235];
+                            pdf.setFillColor(...fillColor);
+                            pdf.setDrawColor(187, 187, 187);
+                            pdf.setLineWidth(unitScale);
+                            pdf.setLineDashPattern([2 * unitScale, 1.6 * unitScale], 0);
+                            pdf.roundedRect(x, y, seatWidth, seatHeight, radius, radius, 'FD');
+                        }
+                        pdf.setLineDashPattern([], 0);
+                        if (student) drawPdfStudentText(pdf, student, x, y, seatWidth, seatHeight, layoutMode, unitScale);
+                    });
+                });
+
+                const podiumX = (pageWidth - podiumWidth) / 2;
+                const podiumY = reversed ? groupY : tableY + tableHeight + podiumGap;
+                pdf.setFillColor(221, 221, 221);
+                pdf.setDrawColor(187, 187, 187);
+                pdf.setLineWidth(unitScale);
+                pdf.setLineDashPattern([2 * unitScale, 1.6 * unitScale], 0);
+                pdf.roundedRect(podiumX, podiumY, podiumWidth, podiumHeight,
+                    6 * unitScale, 6 * unitScale, 'FD');
+                pdf.setLineDashPattern([], 0);
+                pdf.setTextColor(51, 51, 51);
+                const podiumFontSize = 20 * unitScale / 0.352778;
+                pdf.setFontSize(podiumFontSize);
+                pdf.text('讲台', pageWidth / 2,
+                    podiumY + podiumHeight / 2 + podiumFontSize * 0.352778 * 0.34,
+                    { align: 'center' });
+
+                pdf.save(`座位表_${dateStr}_${reversed ? '学生视角' : '老师视角'}.pdf`);
+            } catch (error) {
+                console.error('导出PDF失败:', error);
+                alert('导出矢量 PDF 失败。首次导出需要联网加载中文字体，请检查网络连接后重试。');
+            } finally {
+                exportButtons.forEach(button => button.disabled = false);
+                document.body.style.cursor = previousCursor;
+            }
+        }
+
+        function exportPDF() {
+            return exportSeatPDF(false);
+        }
+
+        function exportPDFReversed() {
+            return exportSeatPDF(true);
+        }
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function autoSeat() {
+            const rows = seatTable.rows.length;
+            const cols = rows > 0 ? seatTable.rows[0].querySelectorAll('td:not(.aisle)').length : 0;
+            const roster = collectAllStudents();
+            const leaderCount = roster.filter(student => student.isLeader).length;
+
+            if (!rows || !cols) {
+                alert('请先生成座位表。');
+                return;
+            }
+            if (roster.length === 0) {
+                alert('请先导入学生名单。');
+                return;
+            }
+            if (leaderCount > 0 && leaderCount !== cols) {
+                alert(`请检查组长人数 (${leaderCount}人) 与座位表真实列数 (${cols}列) 是否对应。\n当前座位不会被改动。`);
+                return;
+            }
+
+            clearSeats(true);
+            const allStudents = [
+                ...Array.from(maleStudentsContainer.children),
+                ...Array.from(femaleStudentsContainer.children)
+            ].map(element => ({ ...getStudentRecord(element), element }));
+            const leaders = allStudents.filter(student => student.isLeader);
+            const nonLeaders = shuffle(allStudents.filter(student => !student.isLeader));
+
+            if (leaders.length === cols) {
+                shuffle(leaders);
+                for (let c = 0; c < cols; c++) {
+                    const student = leaders[c];
+                    const randomRow = Math.floor(Math.random() * rows);
+                    const cell = seatTable.rows[randomRow].querySelectorAll('td:not(.aisle)')[c];
+                    applyStudentToSeat(cell, student);
+                    student.element.remove();
+                }
+            }
+
+            let studentIndex = 0;
+            for (let r = rows - 1; r >= 0; r--) {
+                const seatCells = seatTable.rows[r].querySelectorAll('td:not(.aisle)');
+                for (let c = 0; c < cols; c++) {
+                    const cell = seatCells[c];
+                    if (getStudentName(cell) === "" && studentIndex < nonLeaders.length) {
+                        const student = nonLeaders[studentIndex++];
+                        applyStudentToSeat(cell, student);
+                        student.element.remove();
+                    }
+                }
+            }
+
+            sortStudentList('male');
+            sortStudentList('female');
+            updateSummary();
+            const remaining = maleStudentsContainer.children.length + femaleStudentsContainer.children.length;
+            if (remaining > 0) {
+                alert(`座位不足，已有 ${remaining} 名学生保留在未排区，没有丢失。`);
+            }
+        }
+
+        initTable(8, 8, false);
+    </script>
+</body>
+</html>

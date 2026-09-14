@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>快速排座位</title>
+    <style>
+        body {
+            font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background-color: #f4f4f2;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+            font-size: 18px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #555;
+            font-weight: bold;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: stretch;
+        }
+        
+        /* 统一设置四个面板的样式 */
+        .panel {
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* 1. 导入控制区 */
+        .import-controls {
+            width: 300px;
+        }
+
+        /* 2. 男生名单区 */
+        .male-list, .female-list {
+            width: 200px;
+        }
+        
+        /* 3. 座位区 */
+        .seat-area {
+            flex: 1;
+            align-items: center;
+            min-width: 600px;
+        }
+
+        /* 内部学生列表容器，用于滚动 */
+        .student-list-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+
+        .student {
+            border-radius: 6px;
+            padding: 8px;
+            margin: 6px 0;
+            text-align: center;
+            cursor: grab;
+            user-select: none;
+            font-weight: bold;
+            font-size: 18px;
+            transition: background-color 0.2s, border 0.2s; /* 添加 border 过渡 */
+            position: relative;
+            overflow: hidden;
+            z-index: 0;
+            /* 默认细边框 */
+            border: 1px solid transparent; 
+        }
+        .male {
+            background-color: #add8e6;
+            color: #333;
+        }
+        .female {
+            background-color: #f6c1c1;
+            color: #333;
+        }
+        .student:active {
+            cursor: grabbing;
+        }
+
+        /* 小组长标记样式 - 渐变 + 粗边框 */
+        .leader {
+            color: #333; /* 修改：组长名字改为黑色 */
+            /* 粗边框标记 */
+            border: 3px solid; 
+        }
+        /* 区分男女生的边框颜色 */
+        .leader.male {
+            background: linear-gradient(to right, #4682b4, #add8e6 60%); 
+            border-color: #1a4f78; /* 深蓝色边框 */
+        }
+        .leader.female {
+            background: linear-gradient(to right, #b47979, #f6c1c1 60%); 
+            border-color: #8c4c4c; /* 深红色边框 */
+        }
+        
+        .seat-config {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .seat-config input {
+            width: 50px;
+            text-align: center;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .seat-config button {
+            padding: 5px 10px;
+        }
+        /* 新增：自动排座按钮的容器 */
+        .auto-seat-controls {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 15px;
+        }
+        .auto-seat-controls button {
+            background-color: #5cb85c; /* 绿色 */
+            color: white;
+            font-size: 18px;
+            padding: 10px 20px;
+        }
+        .auto-seat-controls button:hover {
+            background-color: #4cae4c;
+        }
+
+        table {
+            border-collapse: separate;
+            border-spacing: 6px;
+        }
+        td {
+            width: 100px;
+            height: 60px;
+            /* 基础边框为虚线 */
+            border: 1px dashed #bbb; 
+            border-radius: 6px;
+            text-align: center;
+            vertical-align: middle;
+            font-size: 20px;
+            font-weight: bold;
+            background-color: #f0efeb;
+            transition: background-color 0.3s, border 0.2s; /* 添加 border 过渡 */
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            z-index: 0;
+        }
+        td.drag-over {
+            background-color: #d6ccc2;
+        }
+        /* 座位上的小组长标记 - 渐变 + 粗边框 */
+        td.leader {
+            color: #333; /* 修改：座位上的组长名字改为黑色 */
+            /* 粗边框标记，覆盖虚线 */
+            border: 3px solid; 
+        }
+        /* 区分男女生的边框颜色 */
+        td[data-gender="male"].leader {
+            background: linear-gradient(to right, #4682b4, #add8e6 60%); 
+            border-color: #1a4f78; /* 深蓝色边框 */
+        }
+        td[data-gender="female"].leader {
+            background: linear-gradient(to right, #b47979, #f6c1c1 60%); 
+            border-color: #8c4c4c; /* 深红色边框 */
+        }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        button {
+            background-color: #b8c0c2;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.2s;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #a5b0b2;
+        }
+        textarea {
+            margin-top: 10px;
+            width: 100%;
+            max-width: 100%;
+            height: 120px;
+            border-radius: 8px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            resize: vertical;
+            font-size: 16px;
+        }
+        .podium {
+            margin: 10px auto;
+            width: 100px;
+            height: 60px;
+            border: 1px dashed #bbb;
+            border-radius: 6px;
+            text-align: center;
+            line-height: 60px;
+            font-size: 20px;
+            font-weight: bold;
+            background-color: #ddd;
+        }
+        .export-title {
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .export-temp-container {
+            padding: 20px;
+            background-color: #f4f4f2;
+            display: inline-block;
+        }
+
+        /* 导出时的特殊样式 */
+        .reversed-view table {
+            transform: rotate(180deg);
+        }
+        .reversed-view td {
+            transform: rotate(-180deg);
+        }
+
+        /* 标记框样式 */
+        #leaderBox, #talkativeBox {
+            margin-top: 20px;
+            border: 2px dashed #a5a5a5;
+            padding: 15px;
+            text-align: center;
+            border-radius: 8px;
+            min-height: 80px;
+        }
+        #leaderBox h4, #talkativeBox h4 {
+            margin: 0 0 10px 0;
+            color: #777;
+        }
+
+        /* 新增：爱讲话学生标记样式 */
+        .student.talkative::before, td.talkative::before {
+            content: '📣'; /* 喇叭 emoji */
+            position: absolute;
+            top: -2px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 16px;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+    <h1>快速排座位</h1>
+    <div class="container">
+        <div class="panel import-controls">
+            <h3>导入名单</h3>
+            <h4>导入男生</h4>
+            <textarea id="maleInput" placeholder="01 张三&#10;02 李四"></textarea>
+            <button onclick="loadStudents('male')">导入男生</button>
+            <h4>导入女生</h4>
+            <textarea id="femaleInput" placeholder="03 王红&#10;04 李丽"></textarea>
+            <button onclick="loadStudents('female')">导入女生</button>
+            <div class="controls">
+                <button onclick="saveStudents()">保存名单</button>
+                <button onclick="loadStudentsFile()">加载名单</button>
+                <button onclick="clearStudents()">清空名单</button>
+            </div>
+            
+            <div id="leaderBox">
+                <h4>标记小组长 (拖入学生到此)</h4>
+            </div>
+            <div id="talkativeBox">
+                <h4>标记爱讲话学生 (拖入学生到此)</h4>
+            </div>
+        </div>
+
+        <div class="panel male-list">
+            <h3>未排座位男生</h3>
+            <div id="maleStudentsContainer" class="student-list-container"></div>
+        </div>
+
+        <div class="panel female-list">
+            <h3>未排座位女生</h3>
+            <div id="femaleStudentsContainer" class="student-list-container"></div>
+        </div>
+
+        <div class="panel seat-area" id="seatArea">
+            <h3>座位表</h3>
+            <div class="seat-config">
+                <label>行数:</label>
+                <input type="number" id="rowsInput" value="8" min="1" max="20">
+                <label>列数:</label>
+                <input type="number" id="colsInput" value="8" min="1" max="20">
+                <button onclick="generateTable()">生成座位表</button>
+            </div>
+            <div class="auto-seat-controls">
+                <button onclick="autoSeat()">随机排座</button>
+            </div>
+            <table id="seatTable"></table>
+            <div class="podium">讲台</div>
+            <div class="controls">
+                <button onclick="exportSeatsTeacher()">导出老师视角表格</button>
+                <button onclick="exportSeatsStudent()">导出学生视角表格</button>
+                <button onclick="clearSeats(true)">清空座位表</button>
+                <button onclick="saveSeats()">保存座位表</button>
+                <button onclick="loadSeats()">加载座位表</button>
+                <button onclick="exportPNG()">导出老师视角 PNG</button>
+                <button onclick="exportPNGReversed()">导出学生视角 PNG</button>
+            </div>
+            <textarea id="outputArea" placeholder="这里将生成可复制到Excel的表格"></textarea>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script>
+        const seatTable = document.getElementById("seatTable");
+        const outputArea = document.getElementById("outputArea");
+        const maleStudentsContainer = document.getElementById("maleStudentsContainer");
+        const femaleStudentsContainer = document.getElementById("femaleStudentsContainer");
+        const rowsInput = document.getElementById("rowsInput");
+        const colsInput = document.getElementById("colsInput");
+        const leaderBox = document.getElementById("leaderBox");
+        const talkativeBox = document.getElementById("talkativeBox");
+
+        let draggedEl = null;
+        let originalParent = null;
+
+        // 监听小组长框的拖拽事件
+        leaderBox.addEventListener("dragover", dragOver);
+        leaderBox.addEventListener("drop", (e) => {
+            e.preventDefault();
+            leaderBox.classList.remove("drag-over");
+            
+            if (!draggedEl) return;
+            
+            // 只有从 "未排座位" 列表拖入的学生才能标记/取消标记
+            if (originalParent === maleStudentsContainer || originalParent === femaleStudentsContainer) {
+                draggedEl.classList.toggle('leader');
+            }
+        });
+        leaderBox.addEventListener("dragleave", dragLeave);
+
+        // 新增：监听爱讲话学生框的拖拽事件
+        talkativeBox.addEventListener("dragover", dragOver);
+        talkativeBox.addEventListener("drop", (e) => {
+            e.preventDefault();
+            talkativeBox.classList.remove("drag-over");
+            if (!draggedEl) return;
+            // 只有从 "未排座位" 列表拖入的学生才能标记/取消标记
+            if (originalParent === maleStudentsContainer || originalParent === femaleStudentsContainer) {
+                draggedEl.classList.toggle('talkative');
+            }
+        });
+        talkativeBox.addEventListener("dragleave", dragLeave);
+
+
+        // 监听 document 上的拖拽结束事件，用于拖出归位
+        document.addEventListener("dragend", (e) => {
+            if (!draggedEl) return;
+            // 检查鼠标松开时的位置是否在任何可放置区域之外
+            const dropTarget = e.target.closest('td') || e.target.closest('.student-list-container') || e.target.closest('#leaderBox') || e.target.closest('#talkativeBox');
+            if (!dropTarget && !(originalParent === maleStudentsContainer || originalParent === femaleStudentsContainer)) {
+                // 如果是从座位表拖出
+                const gender = draggedEl.dataset.gender;
+                const name = draggedEl.textContent;
+                const isLeader = draggedEl.classList.contains('leader');
+                const isTalkative = draggedEl.classList.contains('talkative');
+                
+                addStudent(name, gender, isLeader, isTalkative);
+                sortStudentList(gender);
+
+                draggedEl.textContent = "";
+                draggedEl.style.backgroundColor = "#f0efeb";
+                draggedEl.classList.remove('leader', 'talkative');
+                draggedEl.style.border = '1px dashed #bbb'; // 恢复座位边框样式
+                delete draggedEl.dataset.gender;
+            }
+            // 恢复拖拽元素的透明度
+            draggedEl.style.opacity = '1'; 
+        });
+
+
+        /**
+         * 初始化座位表格
+         * @param {number} rows - 行数
+         * @param {number} cols - 列数
+         */
+        function initTable(rows = 8, cols = 8) {
+            clearSeats(false);
+            
+            seatTable.innerHTML = "";
+            for (let r = 0; r < rows; r++) {
+                const row = seatTable.insertRow();
+                for (let c = 0; c < cols; c++) {
+                    const cell = row.insertCell();
+                    cell.addEventListener("dragover", dragOver);
+                    cell.addEventListener("drop", drop);
+                    cell.addEventListener("dragleave", dragLeave);
+                    
+                    cell.draggable = true;
+                    cell.addEventListener("dragstart", dragStart);
+                }
+            }
+        }
+
+        // 从输入框获取行列数并生成表格
+        function generateTable() {
+            const rows = parseInt(rowsInput.value) || 8;
+            const cols = parseInt(colsInput.value) || 8;
+            initTable(rows, cols);
+        }
+        
+        // 导入学生名单
+        function loadStudents(type) {
+            const input = type === "male" ? document.getElementById("maleInput").value.trim() : document.getElementById("femaleInput").value.trim();
+            const names = input.split("\n").map(n => n.trim()).filter(n => n);
+
+            if (type === "male") {
+                document.getElementById("maleInput").value = '';
+            } else {
+                document.getElementById("femaleInput").value = '';
+            }
+
+            names.forEach(name => {
+                const container = type === 'male' ? maleStudentsContainer : femaleStudentsContainer;
+                // 检查学生是否已经存在
+                const existingStudent = Array.from(container.children).find(student => student.textContent === name && student.dataset.gender === type);
+                if (!existingStudent) {
+                    addStudent(name, type, false, false); // 默认不是小组长, 也不是爱讲话
+                }
+            });
+            sortStudentList(type);
+        }
+
+        // 添加单个学生块到未排名单区
+        function addStudent(name, type, isLeader = false, isTalkative = false) {
+            const el = document.createElement("div");
+            el.className = `student ${type}`;
+            el.textContent = name;
+            el.draggable = true;
+            el.dataset.gender = type;
+            if (isLeader) {
+                el.classList.add('leader');
+            }
+            if (isTalkative) {
+                el.classList.add('talkative');
+            }
+            el.addEventListener("dragstart", dragStart);
+            if (type === 'male') {
+                maleStudentsContainer.appendChild(el);
+            } else {
+                femaleStudentsContainer.appendChild(el);
+            }
+        }
+
+        // 拖拽开始事件
+        function dragStart(e) {
+            draggedEl = e.target;
+            originalParent = draggedEl.parentNode;
+            
+            setTimeout(() => {
+                draggedEl.style.opacity = '0.5';
+            }, 0);
+        }
+        
+        function dragOver(e) {
+            e.preventDefault();
+            const target = e.target.closest('td') || e.target.closest('.student-list-container') || e.target.closest('#leaderBox') || e.target.closest('#talkativeBox');
+            if (target) {
+                target.classList.add("drag-over");
+            }
+        }
+
+        function dragLeave(e) {
+            const target = e.target.closest('td') || e.target.closest('.student-list-container') || e.target.closest('#leaderBox') || e.target.closest('#talkativeBox');
+            if (target) {
+                target.classList.remove("drag-over");
+            }
+        }
+        
+        // 放置事件 (核心逻辑)
+        function drop(e) {
+            e.preventDefault();
+            const target = e.target.closest('td') || e.target.closest('.student-list-container') || e.target.closest('#leaderBox') || e.target.closest('#talkativeBox');
+            if (target) {
+                 target.classList.remove("drag-over");
+            }
+            if (!draggedEl) return;
+        
+            const targetCell = e.target.closest('td');
+            const targetListContainer = e.target.closest('.student-list-container');
+        
+            const draggedIsLeader = draggedEl.classList.contains('leader');
+            const draggedIsTalkative = draggedEl.classList.contains('talkative');
+
+            if (targetCell) { // 拖到座位上
+                const targetName = targetCell.textContent.trim();
+                const targetGender = targetCell.dataset.gender;
+                const targetIsLeader = targetCell.classList.contains('leader');
+                const targetIsTalkative = targetCell.classList.contains('talkative');
+        
+                if (targetName === "") { // 目标空位
+                    targetCell.textContent = draggedEl.textContent;
+                    targetCell.dataset.gender = draggedEl.dataset.gender;
+                    targetCell.style.backgroundColor = draggedEl.dataset.gender === "male" ? "#add8e6" : "#f6c1c1"; 
+                    
+                    draggedIsLeader ? targetCell.classList.add('leader') : targetCell.classList.remove('leader');
+                    draggedIsTalkative ? targetCell.classList.add('talkative') : targetCell.classList.remove('talkative');
+                    
+                    if (originalParent === maleStudentsContainer || originalParent === femaleStudentsContainer) {
+                        draggedEl.remove();
+                    } else { // 从座位换位
+                        draggedEl.textContent = "";
+                        draggedEl.style.backgroundColor = "#f0efeb";
+                        draggedEl.classList.remove('leader', 'talkative');
+                        delete draggedEl.dataset.gender;
+                    }
+                } else { // 目标有学生，进行交换
+                    const draggedName = draggedEl.textContent.trim();
+                    const draggedGender = draggedEl.dataset.gender;
+
+                    if (originalParent === maleStudentsContainer || originalParent === femaleStudentsContainer) { // 从列表拖到有人的座位
+                        addStudent(targetName, targetGender, targetIsLeader, targetIsTalkative);
+                        sortStudentList(targetGender);
+                        
+                        targetCell.textContent = draggedName;
+                        targetCell.dataset.gender = draggedGender;
+                        targetCell.style.backgroundColor = draggedGender === "male" ? "#add8e6" : "#f6c1c1";
+                        draggedIsLeader ? targetCell.classList.add('leader') : targetCell.classList.remove('leader');
+                        draggedIsTalkative ? targetCell.classList.add('talkative') : targetCell.classList.remove('talkative');
+                        draggedEl.remove();
+                    } else { // 两个座位之间交换
+                        draggedEl.textContent = targetName;
+                        draggedEl.dataset.gender = targetGender;
+                        draggedEl.style.backgroundColor = targetGender === "male" ? "#add8e6" : "#f6c1c1";
+                        targetIsLeader ? draggedEl.classList.add('leader') : draggedEl.classList.remove('leader');
+                        targetIsTalkative ? draggedEl.classList.add('talkative') : draggedEl.classList.remove('talkative');
+        
+                        targetCell.textContent = draggedName;
+                        targetCell.dataset.gender = draggedGender;
+                        targetCell.style.backgroundColor = draggedGender === "male" ? "#add8e6" : "#f6c1c1";
+                        draggedIsLeader ? targetCell.classList.add('leader') : targetCell.classList.remove('leader');
+                        draggedIsTalkative ? targetCell.classList.add('talkative') : targetCell.classList.remove('talkative');
+                    }
+                }
+            } else if (targetListContainer) { // 拖到未排座位列表
+                if (!(originalParent === maleStudentsContainer || originalParent === femaleStudentsContainer)) { // 从座位拖回列表
+                    const studentGender = draggedEl.dataset.gender;
+                    const isLeader = draggedEl.classList.contains('leader');
+                    const isTalkative = draggedEl.classList.contains('talkative');
+                    addStudent(draggedEl.textContent.trim(), studentGender, isLeader, isTalkative);
+                    
+                    draggedEl.textContent = "";
+                    draggedEl.style.backgroundColor = "#f0efeb";
+                    draggedEl.classList.remove('leader', 'talkative');
+                    delete draggedEl.dataset.gender;
+                    sortStudentList(studentGender);
+                }
+            }
+        }
+        
+        // 排序学生名单（按序号）
+        function sortStudentList(type) {
+            const container = type === 'male' ? maleStudentsContainer : femaleStudentsContainer;
+            const students = Array.from(container.children);
+            students.sort((a, b) => {
+                const numA = parseInt(a.textContent.split(" ")[0]) || 0;
+                const numB = parseInt(b.textContent.split(" ")[0]) || 0;
+                return numA - numB;
+            });
+            students.forEach(el => container.appendChild(el));
+        }
+
+        /**
+         * 清空座位表
+         * @param {boolean} returnToStudents - 是否将学生放回列表
+         */
+        function clearSeats(returnToStudents = true) {
+            const rows = seatTable.rows;
+            for (let r = 0; r < rows.length; r++) {
+                const cells = rows[r].cells;
+                for (let c = 0; c < cells.length; c++) {
+                    const cell = cells[c];
+                    if (cell.textContent.trim() !== "" && returnToStudents) {
+                        const isLeader = cell.classList.contains('leader');
+                        const isTalkative = cell.classList.contains('talkative');
+                        addStudent(cell.textContent.trim(), cell.dataset.gender, isLeader, isTalkative);
+                    }
+                    cell.textContent = "";
+                    cell.style.backgroundColor = "#f0efeb";
+                    cell.classList.remove('leader', 'talkative');
+                    delete cell.dataset.gender;
+                }
+            }
+            if (returnToStudents) {
+                sortStudentList('male');
+                sortStudentList('female');
+            }
+        }
+
+        // 清空学生名单输入框和列表
+        function clearStudents() {
+            maleStudentsContainer.innerHTML = "";
+            femaleStudentsContainer.innerHTML = "";
+            document.getElementById("maleInput").value = '';
+            document.getElementById("femaleInput").value = '';
+        }
+
+        // 导出表格到文本区 (Excel 粘贴格式) - 老师视角
+        function exportSeatsTeacher() {
+            let rows = [];
+            for (let r = 0; r < seatTable.rows.length; r++) {
+                let cols = [];
+                for (let c = 0; c < seatTable.rows[r].cells.length; c++) {
+                    const cell = seatTable.rows[r].cells[c];
+                    let text = cell.textContent.trim() || "";
+                    cols.push(text); 
+                }
+                rows.push(cols.join("\t"));
+            }
+            outputArea.value = rows.join("\n");
+        }
+
+        // 新增：导出表格到文本区 (Excel 粘贴格式) - 学生视角
+        function exportSeatsStudent() {
+            let outputRows = [];
+            const numRows = seatTable.rows.length;
+            
+            // 从最后一行（老师视角）开始遍历
+            for (let r = numRows - 1; r >= 0; r--) { 
+                let outputCols = [];
+                const numCols = seatTable.rows[r].cells.length;
+                
+                // 从最后一个单元格（老师视角）开始遍历
+                for (let c = numCols - 1; c >= 0; c--) { 
+                    const cell = seatTable.rows[r].cells[c];
+                    let text = cell.textContent.trim() || "";
+                    outputCols.push(text); 
+                }
+                outputRows.push(outputCols.join("\t"));
+            }
+            outputArea.value = outputRows.join("\n");
+        }
+
+
+        // 保存座位表数据 (JSON)
+        function saveSeats() {
+            const data = [];
+            const rows = seatTable.rows;
+            for (let r = 0; r < rows.length; r++) {
+                const cells = rows[r].cells;
+                for (let c = 0; c < cells.length; c++) {
+                    const cell = cells[c];
+                    if (cell.textContent.trim()) {
+                        data.push({ 
+                            row: r, 
+                            col: c, 
+                            name: cell.textContent.trim(), 
+                            gender: cell.dataset.gender, 
+                            isLeader: cell.classList.contains('leader'),
+                            isTalkative: cell.classList.contains('talkative') 
+                        });
+                    }
+                }
+            }
+            const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = "seats.json";
+            a.click();
+        }
+        
+        // 加载座位表数据 (JSON)
+        function loadSeats() {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = ".json";
+            input.onchange = e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                    clearSeats(true);
+                    try {
+                        const data = JSON.parse(reader.result);
+                        if(data.length > 0) {
+                            const maxRow = Math.max(...data.map(item => item.row)) + 1;
+                            const maxCol = Math.max(...data.map(item => item.col)) + 1;
+                            rowsInput.value = maxRow > 20 ? 20 : maxRow;
+                            colsInput.value = maxCol > 20 ? 20 : maxCol;
+                            initTable(rowsInput.value, colsInput.value);
+                        } else {
+                            initTable();
+                        }
+                        
+                        data.forEach(item => {
+                            if (item.row < seatTable.rows.length && item.col < seatTable.rows[0].cells.length) {
+                                const cell = seatTable.rows[item.row].cells[item.col];
+                                cell.textContent = item.name;
+                                cell.dataset.gender = item.gender;
+                                cell.style.backgroundColor = item.gender === "male" ? "#add8e6" : "#f6c1c1"; 
+                                if (item.isLeader) cell.classList.add('leader');
+                                if (item.isTalkative) cell.classList.add('talkative');
+                            }
+                        });
+                    } catch (error) {
+                        alert("加载座位表文件失败，请检查文件格式。");
+                        console.error("Error loading seats:", error);
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        // 保存学生名单 (JSON)
+        function saveStudents() {
+            const maleNames = Array.from(maleStudentsContainer.children).map(el => ({ name: el.textContent, gender: el.dataset.gender, isLeader: el.classList.contains('leader'), isTalkative: el.classList.contains('talkative') }));
+            const femaleNames = Array.from(femaleStudentsContainer.children).map(el => ({ name: el.textContent, gender: el.dataset.gender, isLeader: el.classList.contains('leader'), isTalkative: el.classList.contains('talkative') }));
+            const allNames = [...maleNames, ...femaleNames];
+            const blob = new Blob([JSON.stringify(allNames)], { type: "application/json" });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = "students.json";
+            a.click();
+        }
+        
+        // 加载学生名单 (JSON)
+        function loadStudentsFile() {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = ".json";
+            input.onchange = e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                    clearStudents();
+                    try {
+                        const data = JSON.parse(reader.result);
+                        data.forEach(item => {
+                            addStudent(item.name, item.gender, item.isLeader, item.isTalkative);
+                        });
+                        sortStudentList('male');
+                        sortStudentList('female');
+                    } catch (error) {
+                        alert("加载学生名单文件失败，请检查文件格式。");
+                        console.error("Error loading students:", error);
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        // 导出 PNG 图片（老师视角）
+        function exportPNG() {
+            const now = new Date();
+            const dateStr = `${now.getFullYear()}年${(now.getMonth() + 1).toString().padStart(2, '0')}月${now.getDate().toString().padStart(2, '0')}日`;
+
+            const exportTempContainer = document.createElement('div');
+            exportTempContainer.className = 'export-temp-container';
+
+            const title = document.createElement('div');
+            title.className = 'export-title';
+            title.textContent = `座位表 ${dateStr}`;
+            exportTempContainer.appendChild(title);
+
+            const tableClone = seatTable.cloneNode(true);
+            // 导出前移除标记
+            tableClone.querySelectorAll('.talkative').forEach(el => el.classList.remove('talkative'));
+            exportTempContainer.appendChild(tableClone);
+
+            const podiumClone = document.querySelector('.podium').cloneNode(true);
+            exportTempContainer.appendChild(podiumClone);
+
+            document.body.appendChild(exportTempContainer);
+
+            html2canvas(exportTempContainer, {
+                scale: 2,
+                logging: false,
+                useCORS: true
+            }).then(canvas => {
+                document.body.removeChild(exportTempContainer);
+
+                const a = document.createElement("a");
+                a.href = canvas.toDataURL("image/png");
+                a.download = `座位表_${dateStr}_老师视角.png`;
+                a.click();
+            }).catch(error => {
+                console.error("导出PNG失败:", error);
+                if (document.body.contains(exportTempContainer)) {
+                    document.body.removeChild(exportTempContainer);
+                }
+            });
+        }
+        
+        // 导出 PNG 图片（学生视角）
+        function exportPNGReversed() {
+            const now = new Date();
+            const dateStr = `${now.getFullYear()}年${(now.getMonth() + 1).toString().padStart(2, '0')}月${now.getDate().toString().padStart(2, '0')}日`;
+
+            const exportTempContainer = document.createElement('div');
+            exportTempContainer.className = 'export-temp-container reversed-view';
+            
+            const title = document.createElement('div');
+            title.className = 'export-title';
+            title.textContent = `座位表 ${dateStr}`;
+
+            const tableClone = seatTable.cloneNode(true);
+            // 导出前移除标记
+            tableClone.querySelectorAll('.talkative').forEach(el => el.classList.remove('talkative'));
+            
+            const newPodium = document.createElement('div');
+            newPodium.className = 'podium';
+            newPodium.textContent = '讲台';
+
+            exportTempContainer.appendChild(title);
+            exportTempContainer.appendChild(newPodium);
+            exportTempContainer.appendChild(tableClone);
+            
+            document.body.appendChild(exportTempContainer);
+
+            html2canvas(exportTempContainer, {
+                scale: 2,
+                logging: false,
+                useCORS: true
+            }).then(canvas => {
+                document.body.removeChild(exportTempContainer);
+                const a = document.createElement("a");
+                a.href = canvas.toDataURL("image/png");
+                a.download = `座位表_${dateStr}_学生视角.png`;
+                a.click();
+            }).catch(error => {
+                console.error("导出PNG失败:", error);
+                if (document.body.contains(exportTempContainer)) {
+                    document.body.removeChild(exportTempContainer);
+                }
+            });
+        }
+
+        // --- 新增自动排座功能 ---
+
+        // 辅助函数：Fisher-Yates 洗牌算法
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        /**
+         * 自动随机排座
+         */
+        function autoSeat() {
+            clearSeats(true);
+
+            const cols = parseInt(colsInput.value) || 8;
+            const rows = parseInt(rowsInput.value) || 8;
+            
+            const maleStudents = Array.from(maleStudentsContainer.children).map(el => ({
+                name: el.textContent,
+                gender: el.dataset.gender,
+                isLeader: el.classList.contains('leader'),
+                isTalkative: el.classList.contains('talkative'),
+                element: el
+            }));
+            const femaleStudents = Array.from(femaleStudentsContainer.children).map(el => ({
+                name: el.textContent,
+                gender: el.dataset.gender,
+                isLeader: el.classList.contains('leader'),
+                isTalkative: el.classList.contains('talkative'),
+                element: el
+            }));
+
+            let allStudents = [...maleStudents, ...femaleStudents];
+            let leaders = allStudents.filter(s => s.isLeader);
+            let nonLeaders = allStudents.filter(s => !s.isLeader);
+
+            if (leaders.length > 0) {
+                if (leaders.length !== cols) {
+                    alert(`请检查组长人数 (${leaders.length}人) 与座位表列数 (${cols}列) 是否对应。\n若不对应，组长将无法均匀分配。`);
+                    return;
+                }
+            }
+
+            clearSeats(false);
+
+            if (leaders.length === cols) {
+                shuffle(leaders);
+                for (let c = 0; c < cols; c++) {
+                    const student = leaders[c];
+                    const randomRow = Math.floor(Math.random() * rows);
+                    const cell = seatTable.rows[randomRow].cells[c];
+                    
+                    cell.textContent = student.name;
+                    cell.dataset.gender = student.gender;
+                    cell.classList.add('leader');
+                    if(student.isTalkative) cell.classList.add('talkative');
+                    cell.style.backgroundColor = student.gender === "male" ? "#add8e6" : "#f6c1c1";
+                    
+                    student.element.remove();
+                }
+            }
+
+            shuffle(nonLeaders);
+            let studentQueue = nonLeaders;
+            
+            let studentIndex = 0;
+            for (let r = rows - 1; r >= 0; r--) {
+                for (let c = 0; c < cols; c++) {
+                    const cell = seatTable.rows[r].cells[c];
+                    
+                    if (cell.textContent.trim() === "" && studentIndex < studentQueue.length) {
+                        const student = studentQueue[studentIndex];
+                        
+                        cell.textContent = student.name;
+                        cell.dataset.gender = student.gender;
+                        cell.classList.remove('leader');
+                        if(student.isTalkative) cell.classList.add('talkative');
+                        cell.style.backgroundColor = student.gender === "male" ? "#add8e6" : "#f6c1c1";
+                        
+                        student.element.remove();
+                        
+                        studentIndex++;
+                    }
+                }
+            }
+
+            maleStudentsContainer.innerHTML = "";
+            femaleStudentsContainer.innerHTML = "";
+        }
+
+
+        // --- 自动排座功能结束 ---
+
+        // 初始化时生成默认 8x8 表格
+        initTable();
+    </script>
+</body>
+</html>

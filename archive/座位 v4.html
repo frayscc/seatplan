@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>快速排座位</title>
+  <!-- 导出 PNG 依赖（CDN） -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <style>
+    :root{
+      --morandi-1:#f4f4f2; /* 背景 */
+      --morandi-2:#f0efeb; /* 座位底色 */
+      --morandi-3:#d6ccc2; /* hover */
+      --btn:#b8c0c2;
+      --btn-hover:#a5b0b2;
+      --male:#cce5ff;   /* 男生浅蓝 */
+      --female:#ffd6e7; /* 女生浅粉 */
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; padding:20px; color:#333;
+      background:var(--morandi-1);
+      font-family:"KaiTi","楷体",STKaiti,"Kaiti SC",serif; /* 全局楷体 */
+      font-size:17px; /* 字体整体加大 */
+    }
+    h1{ text-align:center; margin:0 0 16px; color:#555; font-size:28px; }
+    .container{ display:flex; gap:20px; align-items:flex-start; }
+
+    .panel{ background:#fff; border-radius:14px; box-shadow:0 4px 10px rgba(0,0,0,.06); padding:18px; }
+
+    /* 左侧名单区 */
+    .left{ width:320px; max-height:80vh; overflow:auto; }
+    .left h3{ margin:0 0 8px; }
+    label{ display:block; margin-top:8px; font-weight:600; }
+    textarea{
+      width:100%; height:110px; margin-top:6px; resize:none;
+      border:1px solid #ccc; border-radius:10px; padding:10px; background:#fff;
+      font-family:"KaiTi","楷体",STKaiti,"Kaiti SC",serif; font-size:16px;
+    }
+    .controls{ display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+    button{
+      background:var(--btn); border:none; padding:10px 14px; border-radius:10px;
+      cursor:pointer; transition:.15s; font-size:16px;
+    }
+    button:hover{ background:var(--btn-hover); }
+
+    .pool-wrap{ margin-top:14px; }
+    .pool-title{ font-weight:700; margin-bottom:6px; }
+    .pool{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px; max-height:300px; overflow:auto; padding:6px; border:1px dashed #cfcfcf; border-radius:10px; }
+    .pool.over{ outline:2px dashed var(--morandi-3); outline-offset:2px; }
+
+    .student{ border-radius:8px; padding:8px 10px; text-align:center; cursor:grab; user-select:none; white-space:nowrap; }
+    .student:active{ cursor:grabbing; }
+    .student.male{ background:var(--male); }
+    .student.female{ background:var(--female); }
+
+    /* 座位区 */
+    .right{ flex:1; display:flex; flex-direction:column; gap:12px; align-items:stretch; }
+    .board-wrap{ display:flex; flex-direction:column; align-items:center; gap:10px; }
+    .board-title{ font-weight:700; }
+
+    #seatBoard{ background:#fff; border-radius:14px; padding:16px; box-shadow:0 4px 10px rgba(0,0,0,.06); }
+    table{ border-collapse:separate; border-spacing:10px; }
+    td{
+      width:160px; height:56px; border:1px dashed #bdbdbd; border-radius:10px;
+      background:var(--morandi-2); text-align:center; vertical-align:middle;
+      font-size:17px; white-space:nowrap; overflow:hidden; padding:4px;
+    }
+    td.drag-over{ background:var(--morandi-3); }
+
+    #outputArea{ height:120px; }
+  </style>
+</head>
+<body>
+  <h1>快速排座位</h1>
+  <div class="container">
+    <!-- 左侧：学生名单 -->
+    <section class="panel left" id="leftPanel">
+      <h3>学生名单</h3>
+      <label for="maleInput">男生名单（每行一人，如：01 张三）</label>
+      <textarea id="maleInput" placeholder="01 张三\n02 李四"></textarea>
+      <label for="femaleInput">女生名单（每行一人，如：03 王五）</label>
+      <textarea id="femaleInput" placeholder="03 王五\n04 赵六"></textarea>
+
+      <div class="controls">
+        <button id="btnImport">导入到未入座</button>
+        <button id="btnSaveList">导出名单JSON</button>
+        <button id="btnLoadList">加载名单JSON</button>
+        <button id="btnClearPool">清空未入座</button>
+      </div>
+
+      <div class="pool-wrap">
+        <div class="pool-title">未入座</div>
+        <div id="pool" class="pool" aria-label="未入座学生可从此拖到座位"></div>
+      </div>
+
+      <!-- 隐藏文件选择框（名单/座位） -->
+      <input type="file" id="fileList" accept="application/json" hidden />
+      <input type="file" id="fileSeats" accept="application/json" hidden />
+    </section>
+
+    <!-- 右侧：座位表 -->
+    <section class="panel right">
+      <div class="board-wrap">
+        <div class="board-title">座位表（8 × 8）</div>
+        <div id="seatBoard">
+          <table id="seatTable" aria-label="8x8 座位表"></table>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="btnExportTSV">导出为表格（复制到Excel）</button>
+        <button id="btnClearSeats">清空座位</button>
+        <button id="btnSaveSeats">导出座位JSON</button>
+        <button id="btnLoadSeats">加载座位JSON</button>
+        <button id="btnExportPNG">导出PNG图片</button>
+      </div>
+
+      <textarea id="outputArea" placeholder="这里将生成可复制到 Excel 的表格（制表符分隔）"></textarea>
+    </section>
+  </div>
+
+  <script>
+    const ROWS = 8, COLS = 8;
+    const seatTable = document.getElementById('seatTable');
+    const poolEl = document.getElementById('pool');
+    const outputArea = document.getElementById('outputArea');
+
+    const maleInput = document.getElementById('maleInput');
+    const femaleInput = document.getElementById('femaleInput');
+
+    const btnImport = document.getElementById('btnImport');
+    const btnSaveList = document.getElementById('btnSaveList');
+    const btnLoadList = document.getElementById('btnLoadList');
+    const btnClearPool = document.getElementById('btnClearPool');
+
+    const btnExportTSV = document.getElementById('btnExportTSV');
+    const btnClearSeats = document.getElementById('btnClearSeats');
+    const btnSaveSeats = document.getElementById('btnSaveSeats');
+    const btnLoadSeats = document.getElementById('btnLoadSeats');
+    const btnExportPNG = document.getElementById('btnExportPNG');
+
+    const fileListInput = document.getElementById('fileList');
+    const fileSeatsInput = document.getElementById('fileSeats');
+
+    let draggedEl = null;      // 被拖拽的 .student
+    let sourceCell = null;     // 起始单元格（从座位拖起时）
+
+    function initTable(){
+      seatTable.innerHTML = '';
+      for(let r=0;r<ROWS;r++){
+        const tr = document.createElement('tr');
+        for(let c=0;c<COLS;c++){
+          const td = document.createElement('td');
+          td.addEventListener('dragover', onCellDragOver);
+          td.addEventListener('dragleave', onCellDragLeave);
+          td.addEventListener('drop', onCellDrop);
+          tr.appendChild(td);
+        }
+        seatTable.appendChild(tr);
+      }
+    }
+
+    // 工具：创建学生块
+    function createStudent(name, gender){
+      const el = document.createElement('div');
+      el.className = `student ${gender==='female'?'female':'male'}`;
+      el.textContent = name;
+      el.draggable = true;
+      el.dataset.gender = (gender==='female'?'female':'male');
+      el.addEventListener('dragstart', onDragStart);
+      el.addEventListener('dragend', onDragEnd);
+      return el;
+    }
+
+    // 解析文本框名单为数组
+    function parseNames(text){
+      return text.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+    }
+
+    // 导入到未入座
+    btnImport.addEventListener('click', ()=>{
+      const males = parseNames(maleInput.value);
+      const females = parseNames(femaleInput.value);
+      // 将新名单添加到未入座（不清空已有，避免误操作），如需清空用按钮
+      males.forEach(n=> poolEl.appendChild(createStudent(n,'male')));
+      females.forEach(n=> poolEl.appendChild(createStudent(n,'female')));
+    });
+
+    // 清空未入座
+    btnClearPool.addEventListener('click', ()=>{
+      poolEl.innerHTML = '';
+    });
+
+    // 拖拽逻辑
+    function onDragStart(e){
+      draggedEl = e.target;
+      sourceCell = draggedEl.parentElement.tagName === 'TD' ? draggedEl.parentElement : null;
+      setTimeout(()=> draggedEl.style.visibility = 'hidden', 0); // 用 visibility 避免布局抖动
+      e.dataTransfer.effectAllowed = 'move';
+    }
+    function onDragEnd(){
+      if(draggedEl){ draggedEl.style.visibility = 'visible'; }
+      draggedEl = null; sourceCell = null;
+    }
+
+    function onCellDragOver(e){
+      e.preventDefault();
+      const td = e.currentTarget;
+      td.classList.add('drag-over');
+      e.dataTransfer.dropEffect = 'move';
+    }
+    function onCellDragLeave(e){ e.currentTarget.classList.remove('drag-over'); }
+
+    function onCellDrop(e){
+      e.preventDefault();
+      const td = e.currentTarget;
+      td.classList.remove('drag-over');
+      if(!draggedEl) return;
+
+      // 如果目标单元格已有学生 → 交换
+      const targetStudent = td.querySelector('.student');
+      if(targetStudent){
+        if(sourceCell){
+          // 从一个座位拖到另一个座位：与对方互换
+          sourceCell.appendChild(targetStudent);
+        }else{
+          // 从未入座拖到已占座位：把对方送回未入座
+          poolEl.appendChild(targetStudent);
+        }
+      }
+      // 放置拖拽来的学生
+      td.appendChild(draggedEl);
+    }
+
+    // 允许把学生拖回未入座（作为回收站）
+    poolEl.addEventListener('dragover', (e)=>{ e.preventDefault(); poolEl.classList.add('over'); });
+    poolEl.addEventListener('dragleave', ()=> poolEl.classList.remove('over'));
+    poolEl.addEventListener('drop', (e)=>{
+      e.preventDefault(); poolEl.classList.remove('over');
+      if(!draggedEl) return;
+      poolEl.appendChild(draggedEl);
+    });
+
+    // 导出为可复制的表格（TSV）
+    btnExportTSV.addEventListener('click', ()=>{
+      const rows = [];
+      [...seatTable.rows].forEach(tr=>{
+        const cols = [...tr.cells].map(td=>{
+          const s = td.querySelector('.student');
+          return s ? s.textContent.trim() : '';
+        });
+        rows.push(cols.join('\t'));
+      });
+      outputArea.value = rows.join('\n');
+      outputArea.select();
+    });
+
+    // 清空座位（把学生送回未入座，而不是销毁）
+    btnClearSeats.addEventListener('click', ()=>{
+      [...seatTable.querySelectorAll('td')].forEach(td=>{
+        const s = td.querySelector('.student');
+        if(s) poolEl.appendChild(s);
+      });
+    });
+
+    // 下载 JSON 文件
+    function downloadJSON(obj, filename){
+      const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+      setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 0);
+    }
+
+    // 导出/导入 名单 JSON
+    btnSaveList.addEventListener('click', ()=>{
+      const data = {
+        male: parseNames(maleInput.value),
+        female: parseNames(femaleInput.value)
+      };
+      const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+      downloadJSON(data, `学生名单-${ts}.json`);
+    });
+
+    btnLoadList.addEventListener('click', ()=> fileListInput.click());
+    fileListInput.addEventListener('change', async (e)=>{
+      const file = e.target.files[0]; if(!file) return;
+      const text = await file.text();
+      try{
+        const data = JSON.parse(text);
+        maleInput.value = (data.male||[]).join('\n');
+        femaleInput.value = (data.female||[]).join('\n');
+        // 可选：自动导入到未入座
+        // 先清空未入座，避免重复
+        poolEl.innerHTML = '';
+        (data.male||[]).forEach(n=> poolEl.appendChild(createStudent(n,'male')));
+        (data.female||[]).forEach(n=> poolEl.appendChild(createStudent(n,'female')));
+      }catch(err){ alert('加载名单失败：JSON 格式不正确'); }
+      fileListInput.value = '';
+    });
+
+    // 导出/导入 座位 JSON
+    btnSaveSeats.addEventListener('click', ()=>{
+      const data = { rows: ROWS, cols: COLS, grid: [] };
+      [...seatTable.rows].forEach(tr=>{
+        const row = [...tr.cells].map(td=>{
+          const s = td.querySelector('.student');
+          return s ? { name: s.textContent, gender: s.dataset.gender || (s.classList.contains('female')?'female':'male') } : null;
+        });
+        data.grid.push(row);
+      });
+      const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+      downloadJSON(data, `座位表-${ts}.json`);
+    });
+
+    btnLoadSeats.addEventListener('click', ()=> fileSeatsInput.click());
+    fileSeatsInput.addEventListener('change', async (e)=>{
+      const file = e.target.files[0]; if(!file) return;
+      const text = await file.text();
+      try{
+        const data = JSON.parse(text);
+        if(!data || !Array.isArray(data.grid)) throw new Error('bad');
+        if(data.rows!==ROWS || data.cols!==COLS){
+          if(!confirm(`文件尺寸为 ${data.rows}x${data.cols}，与当前 ${ROWS}x${COLS} 不同。仍要尝试加载并截断/补齐吗？`)){
+            fileSeatsInput.value=''; return;
+          }
+        }
+        // 清空当前座位（学生回到未入座，避免丢失）
+        [...seatTable.querySelectorAll('td')].forEach(td=>{
+          const s = td.querySelector('.student');
+          if(s) poolEl.appendChild(s);
+        });
+
+        // 将文件中的学生放入对应座位；若未入座中已有相同姓名+性别，则复用该元素，避免重复
+        for(let r=0;r<ROWS;r++){
+          const row = data.grid[r] || [];
+          for(let c=0;c<COLS;c++){
+            const cellData = row[c] || null;
+            const td = seatTable.rows[r].cells[c];
+            if(cellData){
+              // 在未入座中找是否已有对应学生块
+              let reuse = [...poolEl.querySelectorAll('.student')].find(s=> s.textContent===cellData.name && (s.dataset.gender||'')===cellData.gender);
+              if(!reuse){ reuse = createStudent(cellData.name, cellData.gender); }
+              td.appendChild(reuse);
+            }
+          }
+        }
+      }catch(err){
+        alert('加载座位失败：JSON 格式不正确');
+      }
+      fileSeatsInput.value = '';
+    });
+
+    // 导出 PNG（seatBoard 区域）
+    btnExportPNG.addEventListener('click', async ()=>{
+      const node = document.getElementById('seatBoard');
+      try{
+        const canvas = await html2canvas(node, { scale: 2, backgroundColor: '#ffffff' });
+        const url = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = url; a.download = '座位表.png'; document.body.appendChild(a); a.click();
+        setTimeout(()=> a.remove(), 0);
+      }catch(err){
+        alert('导出 PNG 失败：请检查网络是否可加载 html2canvas');
+      }
+    });
+
+    // 初始化表格
+    initTable();
+  </script>
+</body>
+</html>
